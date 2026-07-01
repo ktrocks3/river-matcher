@@ -134,5 +134,58 @@ def _junction_vertices(adjacency: Adjacency) -> set[int]:
 
     return junctions
 
+
 def _orient_polyline(edge: RawEdge, from_vertex: int, coordinates: RawVertices) -> XYArray:
-    """Orient a raw edge polyline """
+    """Orient a raw edge polyline away from the specified endpoint"""
+    points = np.asarray(edge["path"], dtype=np.float64)
+    endpoint = np.asarray(coordinates[from_vertex], dtype=np.float64)
+
+    start_error = float(np.linalg.norm(points[0] - endpoint))
+    end_error = float(np.linalg.norm(points[-1] - endpoint))
+
+    if end_error < start_error:
+        return np.ascontiguousarray(points[::-1], dtype=np.float64)
+    return np.ascontiguousarray(points, dtype=np.float64)
+
+
+def _concatenate_polyline(first: XYArray, second: XYArray) -> XYArray:
+    """Join two oriented edge polylines without duplicating a shared endpoint"""
+    seam = first[-1] - second[0]
+    if float(np.dot(seam, seam)) <= 1e-24:
+        return np.ascontiguousarray(np.vstack((first, second[1:])), dtype=np.float64)
+    return np.ascontiguousarray(np.vstack((first, second)), dtype=np.float64)
+
+
+def _canonicalize_compressed_edge(u: int, v: int, polyline: XYArray, raw_edge_ids: list[int], chain_vertices: list[int]) -> CompressedEdge:
+    """Give an undirected compressed edge a deterministic orientation"""
+    if u <= v:
+        return {"u": u, "v": v, "polyline": polyline, "raw_edge_ids": tuple(raw_edge_ids), "chain_vertices": tuple(chain_vertices)}
+    return {"u": v, "v": u, "polyline": np.ascontiguousarray(polyline[::-1], dtype=np.float64), "raw_edge_ids": tuple(reversed(raw_edge_ids)),
+            "chain_vertices": tuple(reversed(chain_vertices))}
+
+
+def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[set[int], list[CompressedEdge]]:
+    """Suppress degree two vertices while preserving parallel compressed edges"""
+    adjacency = _build_adjacency(vertices, edges)
+    junctions = _junction_vertices(adjacency)
+    visited_edges: set[int] = set()
+    compressed_edges: list[CompressedEdge] = []
+
+    for start in sorted(junctions):
+        for neighbour, edge_index in adjacency[start]:
+            if edge_index in visited_edges:
+                continue
+
+            edge = edges[edge_index]
+            polyline = _orient_polyline(edge, start, vertices)
+            raw_edge_ids = [int(edge["id"])]
+            chain_vertices = [start, neighbour]
+
+            visited_edges.add(edge_index)
+            previous_edge = edge_index
+            current = neighbour
+
+            while current not in junctions:
+                continuation = [(next_vertex, next_edge) for next_vertex, next_edge in adjacency[current] if next_edge != previous_edge]
+                if len(continuation) != 1:
+                    raise RuntimeError(f"Degree-2 vertex {current} ")
