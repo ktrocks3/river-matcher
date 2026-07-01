@@ -188,4 +188,63 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
             while current not in junctions:
                 continuation = [(next_vertex, next_edge) for next_vertex, next_edge in adjacency[current] if next_edge != previous_edge]
                 if len(continuation) != 1:
-                    raise RuntimeError(f"Degree-2 vertex {current} ")
+                    raise RuntimeError(f"Degree-2 vertex {current} has {len(continuation)} possible continuations")
+
+                next_vertex, next_edge_index = continuation[0]
+                if next_edge_index in visited_edges:
+                    raise RuntimeError(f"Raw edge {edges[next_edge_index]['id']} was encountered twice during compression.")
+                next_edge = edges[next_edge_index]
+                next_polyline = _orient_polyline(next_edge, current, vertices)
+                polyline = _concatenate_polyline(polyline, next_polyline)
+                raw_edge_ids.append(int(next_edge['id']))
+                chain_vertices.append(next_vertex)
+
+                visited_edges.add(next_edge_index)
+                previous_edge = next_edge_index
+                current = next_vertex
+            compressed_edges.append(_canonicalize_compressed_edge(start, current, polyline, raw_edge_ids, chain_vertices))
+
+    if len(visited_edges) != len(edges):
+        missing = sorted(int(edges[index]['id']) for index in range(len(edges)) if edges[index]['id'] not in visited_edges)
+        raise RuntimeError(f'Compression did not visit raw edges {missing}')
+    return junctions, compressed_edges
+
+
+def _largest_component(nodes: set[int], edges: list[CompressedEdge]) -> tuple[set[int], list[CompressedEdge]]:
+    adjacency: dict[int, set[int]] = {node: set() for node in nodes}
+    for edge in edges:
+        u, v = int(edge["u"]), int(edge["v"])
+        adjacency[u].add(v)
+        adjacency[v].add(u)
+    components: list[set[int]] = []
+    seen: set[int] = set()
+    for start in sorted(adjacency):
+        if start in seen:
+            continue
+        component = {start}
+        seen.add(start)
+        queue = deque([start])
+        while queue:
+            current = queue.popleft()
+            for neighbour in sorted(adjacency[current]):
+                if neighbour in seen:
+                    continue
+                seen.add(neighbour)
+                component.add(neighbour)
+                queue.append(neighbour)
+
+            components.append(component)
+
+    if not components:
+        return set(), []
+
+    def component_key(comp: set[int]) -> tuple[int, int, int]:
+        edge_count = sum(int(e["u"]) in comp and int(e["v"]) in comp for e in edges)
+        return len(comp), edge_count, -min(comp)
+
+    largest = max(components, key=component_key)
+    retained_edges = [edge for edge in edges if int(edge["u"]) in largest and int(edge["v"]) in largest]
+    return set(largest), retained_edges
+
+def _compressed_edge_sort_key(edge: CompressedEdge) -> tuple[int, int, tuple[int, ...], tuple[int, ...]]:
+    return int(edge["u"]), int(edge["v"]), int(edge["u"]), int(edge["v"])
