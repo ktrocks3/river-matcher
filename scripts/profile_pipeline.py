@@ -80,6 +80,7 @@ class JunctionEdge:
         object.__setattr__(self, "polyline", polyline)
         object.__setattr__(self, "length", length)
 
+
 @dataclass(frozen=True, slots=True, eq=False)
 class JunctionGraph:
     """The whole embedded junction graph"""
@@ -87,4 +88,66 @@ class JunctionGraph:
     coordinates: Coordinates = field(repr=False)
     edges: tuple[JunctionEdge, ...] = field(repr=False)
     vertices: tuple[VertexId, ...] = field(repr=False)
-    edge_by_id
+    edge_by_id: dict[EdgeId, JunctionEdge] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        name = str(self.name).strip()
+        if not name:
+            raise ValueError(f"Junction graph must have a name")
+
+        coordinates: Coordinates = {}
+        for raw_vertex, raw_point in self.coordinates.items():
+            vertex = int(raw_vertex)
+            if vertex in coordinates:
+                raise ValueError(f"Vertex {vertex} already in graph")
+
+            try:
+                point = np.asarray(raw_point, dtype=np.float64)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"Vertex {vertex} must contain numeric values") from exc
+
+            if point.shape != (2,):
+                raise ValueError(f"Vertex {vertex} must have shape (2, ), got {point.shape}")
+            if not np.all(np.isfinite(point)):
+                raise ValueError(f"Vertex {vertex} must contain finite values")
+
+            coordinates[vertex] = (float(point[0]), float(point[1]))
+
+        if not coordinates:
+            raise ValueError(f"Junction graph must contain at least one vertex")
+
+        edges = tuple(self.edges)
+        edge_by_id = {edge.id: edge for edge in edges}
+
+        for edge in edges:
+            if not isinstance(edge, JunctionEdge):
+                raise ValueError(f"Edge {edge} must contain a JunctionEdge, got {type(edge).__name__}")
+            if edge.id in edge_by_id:
+                raise ValueError(f"Edge {edge.id} already in graph")
+            if edge.u not in coordinates:
+                raise ValueError(f"Edge {edge.u} not in graph")
+            if edge.v not in coordinates:
+                raise ValueError(f"Edge {edge.v} not in graph")
+            edge_by_id[edge.id] = edge
+        object.__setattr__(self, "coordinates", coordinates)
+        object.__setattr__(self, "edges", edges)
+        object.__setattr__(self, "edge_by_id", edge_by_id)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "vertices", tuple(sorted(coordinates)))
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class MatchResult:
+    """Phi: The result of one additive or bottleneck matching run"""
+    objective: Objective
+    feasible: bool
+    value: float
+    phi: VertexMapping = field(default_factory=dict, repr=False)
+    edge_costs: EdgeCosts = field(default_factory=dict, repr=False)
+
+    def __post_init__(self) -> None:
+        objective = Objective(self.objective)
+        feasible = bool(self.feasible)
+        value = float(self.value)
+        phi = {int(source): int(target) for source, target in self.phi.items()}
+        edge_costs = {int(edge_id): }
