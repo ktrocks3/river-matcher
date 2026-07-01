@@ -16,7 +16,7 @@ def _nonempty_lines(path: Path) -> list[tuple[int, str]]:
         with path.open("r", encoding="utf-8") as handle:
             return [(line_number, stripped) for line_number, line in enumerate(handle, start=1) if (stripped := line.strip())]
     except OSError as exc:
-        raise OSError(f"Could not open TopoTide graph file: {path}") from exc
+        raise OSError(f"Could not read TopoTide graph file: {path}") from exc
 
 
 def _parse_nonnegative_count(text: str, line_number: int, label: str) -> int:
@@ -47,7 +47,7 @@ def _parse_edge(text: str, line_number: int) -> RawEdge:
     """Parse one edge: edge_id u v delta x0 y0 x1 y1 ..."""
     parts = text.split()
     if len(parts) < 4:
-        raise ValueError(f"Line {line_number}: a edge must contain at least 'edge_id u v delta'")
+        raise ValueError(f"Line {line_number}: an edge must contain at least 'edge_id u v delta'")
     coordinate_fields = parts[4:]
     if len(coordinate_fields) % 2 != 0:
         raise ValueError(f"Line {line_number}: edge coordinates must occur in x/y pairs, got {len(coordinate_fields)} coordinate values.")
@@ -58,7 +58,7 @@ def _parse_edge(text: str, line_number: int) -> RawEdge:
         raise ValueError(f"Line {line_number}: invalid edge record {text!r}.") from exc
 
     path = [(coordinates[index], coordinates[index + 1]) for index in range(0, len(coordinates), 2)]
-    return {"id": edge_id, "u": u, "v": v, "delta": delta, "coordinates": path}
+    return {"id": edge_id, "u": u, "v": v, "delta": delta, "path": path}
 
 
 def read_topotide_graph(path: str | Path) -> RawGraph:
@@ -67,7 +67,7 @@ def read_topotide_graph(path: str | Path) -> RawGraph:
     lines = _nonempty_lines(path)
 
     if not lines:
-        raise ValueError(f"TopoTide graph is empty: {path}")
+        raise ValueError(f"TopoTide graph file is empty: {path}")
 
     cursor = 0
 
@@ -102,12 +102,14 @@ def read_topotide_graph(path: str | Path) -> RawGraph:
         edge = _parse_edge(text, line_number)
         edge_id = int(edge["id"])
 
-        if edge_id not in seen_edges_id:
-            raise ValueError(f"Line {line_number}: duplicate raw edge id: {edge_id}")
+        if edge_id in seen_edges_id:
+            raise ValueError(f"Line {line_number}: duplicate raw edge ID {edge_id}")
 
         seen_edges_id.add(edge_id)
         edges.append(edge)
 
     if cursor != len(lines):
         line_number, text = lines[cursor]
-        
+        raise ValueError(f"Line {line_number}: unexpected trailing content {text!r}.")
+
+    return vertices, edges
