@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Iterable
 
 import numpy as np
@@ -76,5 +77,62 @@ def filter_raw_graph(vertices: RawVertices, edges: Iterable[RawEdge], *, invalid
 
     return valid_vertices, valid_edges
 
+
 def _build_adjacency(vertices: RawVertices, edges: RawEdges) -> Adjacency:
-    """Build m"""
+    """Build multigraph adjacency using raw-edge list positions as identities"""
+    adjacency: Adjacency = {int(vertex): [] for vertex in vertices}
+
+    for edge_index, edge in enumerate(edges):
+        u, v = int(edge['u']), int(edge['v'])
+        adjacency[u].append((v, edge_index))
+        adjacency[v].append((u, edge_index))
+
+    for vertex in adjacency:
+        adjacency[vertex].sort(key=lambda item: (int(edges[item[1]]["id"]), item[0], item[1]))
+
+    return adjacency
+
+
+def _connected_components(adjacency: Adjacency) -> list[set[int]]:
+    """Return deterministic connected components, including isolated vertices."""
+    components: list[set[int]] = []
+    seen: set[int] = set()
+
+    for start in sorted(adjacency):
+        if start in seen:
+            continue
+
+        component = {start}
+        seen.add(start)
+        queue = deque([start])
+
+        while queue:
+            current = queue.popleft()
+            for neighbour, _ in adjacency[current]:
+                if neighbour in seen:
+                    continue
+
+                seen.add(neighbour)
+                component.add(neighbour)
+                queue.append(neighbour)
+        components.append(component)
+    return components
+
+
+def _junction_vertices(adjacency: Adjacency) -> set[int]:
+    """ Select vertices retained after degree-2 suppression. A component consisting entirely of degree-2 vertices is a cycle. Two deterministic anchor vertices are retained
+    so the cycle becomes two parallel junction edges rather than disappearing. """
+    junctions = {vertex for vertex, incident_edges in adjacency.items() if len(incident_edges) == 1}
+    for component in _connected_components(adjacency):
+        if len(component) < 2:
+            continue
+
+        if all(len(adjacency[vertex]) == 2 for vertex in component):
+            first, second = sorted(component)[:2]
+            junctions.add(first)
+            junctions.add(second)
+
+    return junctions
+
+def _orient_polyline(edge: RawEdge, from_vertex: int, coordinates: RawVertices) -> XYArray:
+    """Orient a raw edge polyline """
