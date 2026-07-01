@@ -59,3 +59,55 @@ def _parse_edge(text: str, line_number: int) -> RawEdge:
 
     path = [(coordinates[index], coordinates[index + 1]) for index in range(0, len(coordinates), 2)]
     return {"id": edge_id, "u": u, "v": v, "delta": delta, "coordinates": path}
+
+
+def read_topotide_graph(path: str | Path) -> RawGraph:
+    """Read a raw TopoTide graph"""
+    path = Path(path)
+    lines = _nonempty_lines(path)
+
+    if not lines:
+        raise ValueError(f"TopoTide graph is empty: {path}")
+
+    cursor = 0
+
+    def next_line(expected: str) -> tuple[int, str]:
+        nonlocal cursor
+
+        if cursor >= len(lines):
+            raise ValueError(f"Unexpected end of file while reading {expected}: {path}")
+        line = lines[cursor]
+        cursor += 1
+        return line
+
+    line_number, text = next_line("the vertex count")
+    vertex_count = _parse_nonnegative_count(text, line_number, "vertex")
+    vertices: RawVertices = {}
+    for vertex_index in range(vertex_count):
+        line_number, text = next_line(f"vertex {vertex_index + 1} of {vertex_count}")
+        vertex_id, coordinates = _parse_vertex(text, line_number)
+
+        if vertex_id in vertices:
+            raise ValueError(f"Line {line_number}: duplicate raw vertex ID {vertex_id}.")
+
+        vertices[vertex_id] = coordinates
+
+    line_number, text = next_line(f"the edge count")
+    edge_count = _parse_nonnegative_count(text, line_number, "edge")
+    edges: RawEdges = []
+    seen_edges_id: set[int] = set()
+
+    for edge_index in range(edge_count):
+        line_number, text = next_line(f"edge {edge_index + 1} of {edge_count}")
+        edge = _parse_edge(text, line_number)
+        edge_id = int(edge["id"])
+
+        if edge_id not in seen_edges_id:
+            raise ValueError(f"Line {line_number}: duplicate raw edge id: {edge_id}")
+
+        seen_edges_id.add(edge_id)
+        edges.append(edge)
+
+    if cursor != len(lines):
+        line_number, text = lines[cursor]
+        
