@@ -4,6 +4,7 @@ import math
 from typing import Any
 
 import numpy as np
+from PIL.ImageChops import offset
 from fontTools.misc import vector
 from numba.core.types import none
 from numpy._core import _dtype
@@ -96,14 +97,69 @@ def sample_polyline_by_arclength(polyline: Any, samples: int) -> XYArray | None:
     lengths = lengths[valid]
     starts = points[:-1][valid]
 
-    if len(lengths) == 0:
-        return None
     total = float(np.sum(lengths))
-
-    if not math.isfinite(total) or total <= 1e-12:
+    if len(lengths) == 0 or not math.isfinite(total) or total <= 1e-12:
         return None
 
     sample_count = max(2, int(samples))
     requested = np.linspace(0.0, total, sample_count, dtype=np.float64)
-    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64)), np.cumsum(lengths))]))
-    
+    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths)))
+    segment_indices = (np.searchsorted(cumulative, requested, side='right') - 1)
+    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
+    fractions = (requested - cumulative[segment_indices]) / lengths[segment_indices]
+    sampled = (starts[segment_indices] + fractions[:, None] * vectors[segment_indices])
+    return np.ascontiguousarray(sampled, dtype=np.float64)
+
+
+def sample_polyline_with_tangents(polyline: Any, samples: int) -> tuple[XYArray | None, XYArray | None]:
+    points = _as_xy_point(polyline)
+    if points is None:
+        return None, None
+    vectors = np.diff(points, axis=0)
+    lengths = np.linalg.norm(vectors, axis=1)
+    valid = lengths > 1e-12
+
+    vectors = vectors[valid]
+    lengths = lengths[valid]
+    starts = points[:-1][valid]
+    total = float(np.sum(lengths))
+    if len(lengths) == 0 or not math.isfinite(total) or total <= 1e-12:
+        return None, None
+    sample_count = max(2, int(samples))
+    requested = np.linspace(0.0, total, sample_count, dtype=np.float64)
+    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths)))
+    segment_indices = (np.searchsorted(cumulative, requested, side='right') - 1)
+    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
+    fractions = (requested - cumulative[segment_indices]) / lengths[segment_indices]
+    sampled = (starts[segment_indices] + fractions[:, None] * vectors[segment_indices])
+    tangents = (vectors[segment_indices] / lengths[segment_indices, None])
+    return np.ascontiguousarray(sampled, dtype=np.float64), np.ascontiguousarray(tangents, dtype=np.float64)
+
+
+def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
+    points = as_xy_array(polyline)
+    if points is None:
+        return None
+
+    starts = points[:-1]
+    vectors = np.diff(points, axis=0)
+    squared_lengths = np.einsum("ij,ij->i", vectors, vectors)
+    valid = squared_lengths > _SEGMENT_SQUARED_TOLERANCE
+    if not np.any(valid):
+        return None
+
+    return (np.ascontiguousarray(starts[valid], dtype=np.float64), np.ascontiguousarray(vectors[valid], dtype=np.float64),
+            np.ascontiguousarray(squared_lengths[valid], dtype=np.float64))
+
+
+def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None) -> float:
+    coordinates = as_xy_array(prepared_polyline)
+    if coordinates is None or prepared_polyline is None:
+        return float('inf')
+    starts, vectors, squared_lengths = prepared_polyline
+    projection = np.sum((coordinates - starts) * vectors, axis=0) / squared_lengths
+    projection = np.clip(projection, 0, 1)
+    offsets = (starts + projection[:, None] * vectors - coordinates)
+    squared_distances = np.einsum("ij,ij->i", offsets, offsets)
+    return math.sqrt(float(np.min(squared_distances)))
+
