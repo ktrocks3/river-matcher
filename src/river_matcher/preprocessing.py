@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 
 from river_matcher.graph_io import RawEdge, RawEdges, RawVertices, read_topotide_graph
 from river_matcher.models import JunctionGraph, JunctionEdge
+from river_matcher.geometry import orient_polyline
 
 type XYArray = NDArray[np.float64]
 type Adjacency = dict[int, list[tuple[int, int]]]
@@ -137,19 +138,6 @@ def _junction_vertices(adjacency: Adjacency) -> set[int]:
     return junctions
 
 
-def _orient_polyline(edge: RawEdge, from_vertex: int, coordinates: RawVertices) -> XYArray:
-    """Orient a raw edge polyline away from the specified endpoint"""
-    points = np.asarray(edge["path"], dtype=np.float64)
-    endpoint = np.asarray(coordinates[from_vertex], dtype=np.float64)
-
-    start_error = float(np.linalg.norm(points[0] - endpoint))
-    end_error = float(np.linalg.norm(points[-1] - endpoint))
-
-    if end_error < start_error:
-        return np.ascontiguousarray(points[::-1], dtype=np.float64)
-    return np.ascontiguousarray(points, dtype=np.float64)
-
-
 def _concatenate_polyline(first: XYArray, second: XYArray) -> XYArray:
     """Join two oriented edge polylines without duplicating a shared endpoint"""
     seam = first[-1] - second[0]
@@ -179,7 +167,7 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 continue
 
             edge = edges[edge_index]
-            polyline = _orient_polyline(edge, start, vertices)
+            polyline = orient_polyline(edge["path"], vertices[start])
             raw_edge_ids = [int(edge["id"])]
             chain_vertices = [start, neighbour]
 
@@ -196,7 +184,7 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 if next_edge_index in visited_edges:
                     raise RuntimeError(f"Raw edge {edges[next_edge_index]['id']} was encountered twice during compression.")
                 next_edge = edges[next_edge_index]
-                next_polyline = _orient_polyline(next_edge, current, vertices)
+                next_polyline = orient_polyline(next_edge["path"], vertices[current])
                 polyline = _concatenate_polyline(polyline, next_polyline)
                 raw_edge_ids.append(int(next_edge['id']))
                 chain_vertices.append(next_vertex)
