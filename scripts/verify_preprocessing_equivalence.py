@@ -94,7 +94,7 @@ def geometry_sort_key(record: EdgeGeometry) -> tuple:
     length, polyline = record
     rounded = tuple(float(value) for value in np.round(polyline.ravel(), 12))
 
-    return (round(length, 12), len(polyline), rounded,)
+    return round(length, 12), len(polyline), rounded,
 
 
 def legacy_edge_groups(graph: object) -> dict[tuple[int, int], list[EdgeGeometry]]:
@@ -142,16 +142,14 @@ def compare_coordinates(legacy_graph: object, migrated_graph: object, *, atol: f
         missing = sorted(legacy_nodes - migrated_nodes)
         extra = sorted(migrated_nodes - legacy_nodes)
 
-        raise AssertionError("Junction vertex sets differ: "
-                             f"missing from migration={missing}, added by migration={extra}.")
+        raise AssertionError(f"Junction vertex sets differ: missing from migration={missing}, added by migration={extra}.")
 
     for vertex in sorted(legacy_nodes):
         legacy_xy = np.asarray(legacy_graph.vertices[vertex], dtype=np.float64)
         migrated_xy = np.asarray(migrated_graph.coordinates[vertex], dtype=np.float64)
 
         if not np.allclose(legacy_xy, migrated_xy, rtol=0.0, atol=atol):
-            raise AssertionError(f"Coordinates differ at vertex {vertex}: "
-                                 f"legacy={legacy_xy.tolist()}, migrated={migrated_xy.tolist()}.")
+            raise AssertionError(f"Coordinates differ at vertex {vertex}: legacy={legacy_xy.tolist()}, migrated={migrated_xy.tolist()}.")
 
 
 def compare_endpoint_multiplicities(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]], ) -> None:
@@ -163,8 +161,7 @@ def compare_endpoint_multiplicities(legacy_groups: dict[tuple[int, int], list[Ed
         differences = [(endpoints, legacy_counts.get(endpoints, 0), migrated_counts.get(endpoints, 0),) for endpoints in all_endpoints if
                        legacy_counts.get(endpoints, 0) != migrated_counts.get(endpoints, 0)]
 
-        raise AssertionError("Endpoint multiplicities differ "
-                             f"(endpoints, legacy, migrated): {differences}.")
+        raise AssertionError(f"Endpoint multiplicities differ (endpoints, legacy, migrated): {differences}.")
 
 
 def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]], *, atol: float, ) -> None:
@@ -177,21 +174,16 @@ def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry
             migrated_length, migrated_polyline = migrated_record
 
             if not np.isclose(legacy_length, migrated_length, rtol=0.0, atol=atol, ):
-                raise AssertionError(f"Edge length differs for {endpoints}, parallel index "
-                                     f"{parallel_index}: legacy={legacy_length:.17g}, "
-                                     f"migrated={migrated_length:.17g}.")
+                raise AssertionError(f"Edge length differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_length:.17g}, migrated={migrated_length:.17g}.")
 
             if legacy_polyline.shape != migrated_polyline.shape:
-                raise AssertionError(f"Polyline shape differs for {endpoints}, parallel index "
-                                     f"{parallel_index}: legacy={legacy_polyline.shape}, "
-                                     f"migrated={migrated_polyline.shape}.")
+                raise AssertionError(
+                    f"Polyline shape differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_polyline.shape}, migrated={migrated_polyline.shape}.")
 
             if not np.allclose(legacy_polyline, migrated_polyline, rtol=0.0, atol=atol, ):
                 maximum_error = float(np.max(np.abs(legacy_polyline - migrated_polyline)))
 
-                raise AssertionError(f"Polyline geometry differs for {endpoints}, parallel "
-                                     f"index {parallel_index}; maximum absolute error "
-                                     f"{maximum_error:.3e}.")
+                raise AssertionError(f"Polyline geometry differs for {endpoints}, parallel index {parallel_index}; maximum absolute error {maximum_error:.3e}.")
 
 
 def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) -> tuple[int, int, int]:
@@ -218,7 +210,7 @@ def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) ->
 
     parallel_groups = sum(len(records) > 1 for records in migrated_groups.values())
 
-    return (len(migrated_graph.vertices), len(migrated_graph.edges), parallel_groups,)
+    return len(migrated_graph.vertices), len(migrated_graph.edges), parallel_groups,
 
 
 def main() -> int:
@@ -243,10 +235,7 @@ def main() -> int:
             print(f"FAIL  {graph_path}")
             print(f"      {type(exc).__name__}: {exc}")
         else:
-            print(f"PASS  {graph_path.stem}: "
-                  f"junction vertices={vertex_count:,}, "
-                  f"junction edges={edge_count:,}, "
-                  f"parallel endpoint groups={parallel_groups:,}")
+            print(f"PASS  {graph_path.stem}:  junction vertices={vertex_count:,}, junction edges={edge_count:,}, parallel endpoint groups={parallel_groups:,}")
 
     if failures:
         print(f"\n{len(failures)} of {len(args.graphs)} graphs differed.")
