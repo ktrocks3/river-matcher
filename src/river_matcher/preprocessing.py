@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections import deque
+from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
 from numpy.typing import NDArray
 
-from river_matcher.graph_io import RawEdge, RawEdges, RawVertices
+from river_matcher.graph_io import RawEdge, RawEdges, RawVertices, read_topotide_graph
+from river_matcher.models import JunctionGraph, JunctionEdge
 
 type XYArray = NDArray[np.float64]
 type Adjacency = dict[int, list[tuple[int, int]]]
@@ -73,7 +75,7 @@ def filter_raw_graph(vertices: RawVertices, edges: Iterable[RawEdge], *, invalid
         if u == v or u not in valid_vertices or v not in valid_vertices or polyline is None:
             continue
 
-        valid_edges.append({"id": edge_id, "u": u, "v": v, "delta": delta, "path": [(float(point[0]), float(point[1]) for point in polyline)]})
+        valid_edges.append({"id": edge_id, "u": u, "v": v, "delta": delta, "path": [(float(point[0]), float(point[1])) for point in polyline]})
 
     return valid_vertices, valid_edges
 
@@ -122,7 +124,7 @@ def _connected_components(adjacency: Adjacency) -> list[set[int]]:
 def _junction_vertices(adjacency: Adjacency) -> set[int]:
     """ Select vertices retained after degree-2 suppression. A component consisting entirely of degree-2 vertices is a cycle. Two deterministic anchor vertices are retained
     so the cycle becomes two parallel junction edges rather than disappearing. """
-    junctions = {vertex for vertex, incident_edges in adjacency.items() if len(incident_edges) == 1}
+    junctions = {vertex for vertex, incident_edges in adjacency.items() if len(incident_edges) != 2}
     for component in _connected_components(adjacency):
         if len(component) < 2:
             continue
@@ -246,5 +248,29 @@ def _largest_component(nodes: set[int], edges: list[CompressedEdge]) -> tuple[se
     retained_edges = [edge for edge in edges if int(edge["u"]) in largest and int(edge["v"]) in largest]
     return set(largest), retained_edges
 
+
 def _compressed_edge_sort_key(edge: CompressedEdge) -> tuple[int, int, tuple[int, ...], tuple[int, ...]]:
-    return int(edge["u"]), int(edge["v"]), int(edge["u"]), int(edge["v"])
+    return int(edge["u"]), int(edge["v"]), tuple(int(value) for value in edge["raw_edge_ids"]), tuple(int(value) for value in edge["chain_vertices"])
+
+
+def preprocess_raw_graph(name: str, vertices: RawVertices, edges: Iterable[RawEdge], *, keep_largest_component: bool = True) -> JunctionGraph:
+    filtered_vertices, filtered_edges = filter_raw_graph(vertices, edges)
+    if not filtered_vertices:
+        raise ValueError(f"Graph {name!r} contains no valid vertices after filtering.")
+    junction_nodes, compressed_edges = compress_degree_two_chains(filtered_vertices, filtered_edges)
+    # Chains returning to their starting junctions become self loops, which we don't currently allow
+    compressed_edges = [edge for edge in compressed_edges if int(edge["u"]) != int(edge["v"])]
+    if keep_largest_component:
+        junction_nodes, compressed_edges = _largest_component(junction_nodes, compressed_edges)
+    if not junction_nodes:
+        raise ValueError(f"Graph {name!r} contains no junction vertices after preprocessing.")
+    retained_coordinates = {vertex: filtered_vertices[vertex] for vertex in sorted(junction_nodes)}
+    ordered_edges = sorted(compressed_edges, key=_compressed_edge_sort_key)
+    junction_edges = tuple(JunctionEdge(id=edge_id, u=int(edge["u"]), v=int(edge["v"]), polyline=edge["polyline"]) for edge_id, edge in enumerate(ordered_edges))
+    return JunctionGraph(name=name, coordinates=retained_coordinates, edges=junction_edges)
+
+
+def load_junction_graph(path: str | Path, *, name: str | None = None, keep_largest_component: bool = True) -> JunctionGraph:
+    path = Path(path)
+    vertices, edges = read_topotide_graph(path)
+    return preprocess_raw_graph(name=name or path.stem, vertices=vertices, edges=edges, keep_largest_component=keep_largest_component)
