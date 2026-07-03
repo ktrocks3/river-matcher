@@ -79,7 +79,7 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
     if segment_starts:
         packed_starts = _contiguous_float64(np.vstack(segment_starts))
         packed_vectors = _contiguous_float64(np.vstack(segment_vectors))
-        packed_lengths = _contiguous_float64(np.vstack(segment_squared_lengths))
+        packed_lengths = _contiguous_float64(np.concatenate(segment_squared_lengths))
     else:
         packed_starts = _float64_array(np.empty((0, 2), dtype=np.float64))
         packed_vectors = _float64_array(np.empty((0, 2), dtype=np.float64))
@@ -111,7 +111,7 @@ def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArra
                 vx, vy = segment_vectors[segment_index, 0], segment_vectors[segment_index, 1]
                 squared_length = segment_squared_lengths[segment_index]
 
-                projection = ((px - sx) * vx + (py - sx) * vy) / squared_length
+                projection = ((px - sx) * vx + (py - sy) * vy) / squared_length
                 projection = min(max(projection, 0.0), 1.0)
 
                 offset_x = sx + projection * vx - px
@@ -124,7 +124,8 @@ def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArra
     return distances
 
 
-def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, distances: FloatArray, *, rho: float, top_k: int) -> CandidateSets:
+def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, distances: FloatArray, *, rho: float, top_k: int, ) -> CandidateSets:
+    """Apply stable distance ordering and endpoint deduplication."""
     candidate_sets: CandidateSets = {}
     for source_index, raw_vertex in enumerate(source_ids):
         vertex = int(raw_vertex)
@@ -133,10 +134,11 @@ def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, di
         for edge_index in range(len(endpoints)):
             distance = float(distances[source_index, edge_index])
             if distance <= rho:
-                hits.append((distance, int(endpoints[edge_index, 0])))
-                hits.append((distance, int(endpoints[edge_index, 1])))
+                hits.append((distance, int(endpoints[edge_index, 0]),))
+                hits.append((distance, int(endpoints[edge_index, 1]),))
 
-        hits.sort(key=lambda x: x[0])
+        # Equal-distance entries retain target-edge order and endpoint order.
+        hits.sort(key=lambda item: item[0])
         output: list[int] = []
         seen: set[int] = set()
 
@@ -148,7 +150,7 @@ def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, di
 
             if len(output) >= top_k:
                 break
-            candidate_sets[vertex] = output
+        candidate_sets[vertex] = output
     return candidate_sets
 
 
