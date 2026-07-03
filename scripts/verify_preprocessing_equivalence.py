@@ -209,8 +209,7 @@ def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) ->
     migrated_graph = load_junction_graph(graph_path)
 
     if migrated_graph.name != graph_path.stem:
-        raise AssertionError(f"Migrated graph name is {migrated_graph.name!r}, "
-                             f"expected {graph_path.stem!r}.")
+        raise AssertionError(f"Migrated graph name is {migrated_graph.name!r}, expected {graph_path.stem!r}.")
 
     compare_coordinates(legacy_graph, migrated_graph, atol=atol)
 
