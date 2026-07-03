@@ -4,10 +4,6 @@ import math
 from typing import Any
 
 import numpy as np
-from PIL.ImageChops import offset
-from fontTools.misc import vector
-from numba.core.types import none
-from numpy._core import _dtype
 from numpy.typing import NDArray
 
 type XYArray = NDArray[np.float64]
@@ -153,7 +149,7 @@ def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
 
 
 def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None) -> float:
-    coordinates = as_xy_array(prepared_polyline)
+    coordinates = as_xy_array(point)
     if coordinates is None or prepared_polyline is None:
         return float('inf')
     starts, vectors, squared_lengths = prepared_polyline
@@ -163,3 +159,62 @@ def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedP
     squared_distances = np.einsum("ij,ij->i", offsets, offsets)
     return math.sqrt(float(np.min(squared_distances)))
 
+
+def points_to_prepared_polyline_distances(points: Any, prepared_polyline: PreparedPolyline | None, *, chunk_size: int = 256) -> XYArray | None:
+    if prepared_polyline is None:
+        return None
+
+    try:
+        query_points = np.asarray(points, dtype=np.float64)
+    except (ValueError, TypeError):
+        return None
+
+    if (query_points.ndim != 2) or (query_points.shape[1] < 2) or len(query_points) == 0:
+        return None
+
+    query_points = np.ascontiguousarray(query_points[:, :2], dtype=np.float64)
+    if not np.all(np.isfinite(query_points)):
+        return None
+
+    starts, vectors, squared_lengths = prepared_polyline
+    distances = np.empty(len(query_points), dtype=np.float64)
+    normalized_chunk_size = max(1, int(chunk_size))
+
+    for start_index in range(0, len(query_points), normalized_chunk_size):
+        chunk = query_points[start_index:start_index + normalized_chunk_size]
+        point_offsets = chunk[:, None, :] - starts[None, :, :]
+        projection = np.einsum("pse, se->ps", point_offsets, vectors) / squared_lengths[None, :]
+        projection = np.clip(projection, 0, 1)
+        closest_offsets = starts[None, :, :] + projection[:, :, None] * vectors[None, :, :] - chunk[:, None, :]
+        squared_distances = np.einsum("psi, psi->ps", closest_offsets, closest_offsets)
+        distances[start_index:start_index + len(chunk)] = np.sqrt(np.min(squared_distances, axis=1))
+    return distances
+
+
+def point_to_polyline_distance(point: Any, polyline: Any) -> float:
+    prepared = prepare_polyline_segments(polyline)
+    return point_to_prepared_polyline_distance(point, prepared)
+
+
+def closest_segment_distance_and_tangent(point: Any, polyline: Any) -> tuple[float, XYArray | None]:
+    """
+    Return the distance and unit tangent of the closest polyline segment.
+    When several segments have equal distance, the first stored segment is selected, matching NumPy's ``argmin`` tie behavior.
+    """
+    coordinates = _as_xy_point(point)
+    prepared = prepare_polyline_segments(polyline)
+    if prepared is None or coordinates is None:
+        return float('inf'), None
+
+    starts, vectors, squared_lengths = prepared
+    projection = np.sum((coordinates - starts) * vectors, axis=1) / squared_lengths
+    projection = np.clip(projection, 0, 1)
+    closest = starts + projection[:, None] * vectors
+    distances = np.linalg.norm(closest - coordinates, axis=1)
+    best = int(np.argmin(distances))
+    segment_length = math.sqrt(float(squared_lengths[best]))
+    if segment_length < 1e-12:
+        return float(distances[best]), None
+
+    tangent = np.ascontiguousarray(vectors[best] / segment_length, dtype=np.float64)
+    return float(distances[best]), tangent
