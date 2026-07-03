@@ -4,7 +4,6 @@ import math
 from typing import Any, cast
 
 import numpy as np
-from networkx.algorithms.bipartite import projection
 from numba import njit, prange
 from numpy import dtype
 from numpy.typing import NDArray
@@ -92,7 +91,7 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
 
 @njit(cache=True, parallel=True, fastmath=False)
 def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
-                                    edge_offsets: IntArray, rho: float) -> float:
+                                    edge_offsets: IntArray, rho: float) -> FloatArray:
     """ Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
     point-to-segment projection."""
     source_count = source_points.shape[0]
@@ -115,3 +114,48 @@ def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArra
 
                 projection = ((px - sx) * vx + (py - sx) * vy) / squared_length
                 projection = min(max(projection, 0.0), 1.0)
+
+                offset_x = sx + projection * vx - px
+                offset_y = sy + projection * vy - py
+                squared_distance = (offset_x ** 2 + offset_y ** 2)
+                if squared_distance < best_squared:
+                    best_squared = squared_distance
+            if math.isfinite(best_squared):
+                distances[source_index, edge_index] = math.sqrt(best_squared)
+    return distances
+
+def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, distances: FloatArray, *, rho: float, top_k: int) -> CandidateSets:
+    candidate_sets: CandidateSets = {}
+    for source_index, raw_vertex in enumerate(source_ids):
+        vertex = int(raw_vertex)
+        hits: list[tuple[float, int]] = []
+
+        for edge_index in range(len(endpoints)):
+            distance = float(distances[source_index, edge_index])
+            if distance <= rho:
+                hits.append((distance, int(endpoints[edge_index, 0])))
+                hits.append((distance, int(endpoints[edge_index, 1])))
+
+        hits.sort(key=lambda x: x[0])
+        output: list[int] = []
+        seen: set[int] = set()
+
+        for _, target_vertex in hits:
+            if target_vertex in seen:
+                continue
+            seen.add(target_vertex)
+            output.append(target_vertex)
+
+            if len(output) >= top_k:
+                break
+            candidate_sets[vertex] = output
+    return candidate_sets
+
+def compute_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho: float = 10.0, top_k: int = 25) -> CandidateSets:
+    """ Generate target-vertex candidates for every source vertex.
+    A target edge contributes both endpoints when the source vertex lies at most ``rho`` from that edge's polyline. Candidate vertices are ordered by the corresponding edge
+    distance, deduplicated, and capped at ``top_k``. """
+    radius, limit = _normalize_parameters(rho, top_k)
+    source_ids = _contiguous_int64(np.asarray(sorted(source.vertices), dtype=np.int64))
+    source_points = _contiguous_float64(np.asarray([source.coordinates[int(vertex)] for vertex in source_ids], dtype=np.float64))
+    
