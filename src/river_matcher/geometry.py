@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
+type FloatArray = NDArray[np.float64]
 type XYArray = NDArray[np.float64]
-type PreparedPolyline = tuple[XYArray, XYArray, NDArray[np.float64]]
+type PreparedPolyline = tuple[XYArray, XYArray, FloatArray]
 
 _DUPLICATE_SQUARED_TOLERANCE = 1e-24
-_SEGMENT_SQUARED_TOLERANCE = 1e-24
+_SEGMENT_SQUARED_TOLERANCE = 1e-12
+
+
+def _float64_array(value: Any) -> FloatArray:
+    return cast(FloatArray, np.asarray(value, dtype=np.float64))
+
+
+def _contiguous_float64(value: Any) -> FloatArray:
+    return cast(FloatArray, np.ascontiguousarray(value, dtype=np.float64))
 
 
 def as_xy_array(polyline: Any) -> XYArray | None:
@@ -37,7 +46,7 @@ def as_xy_array(polyline: Any) -> XYArray | None:
             keep.append(index)
     if len(keep) < 2:
         return None
-    return np.ascontiguousarray(points[keep], dtype=np.float64)
+    return _contiguous_float64(points[keep])
 
 
 def _as_xy_point(point: Any) -> XYArray | None:
@@ -50,7 +59,7 @@ def _as_xy_point(point: Any) -> XYArray | None:
     if coordinates.ndim != 1 or len(coordinates) < 2:
         return None
 
-    coordinates = np.ascontiguousarray(coordinates[:2], dtype=np.float64, )
+    coordinates = _contiguous_float64(coordinates[:2])
 
     if not np.all(np.isfinite(coordinates)):
         return None
@@ -58,31 +67,36 @@ def _as_xy_point(point: Any) -> XYArray | None:
     return coordinates
 
 
-def orient_polyline(polyline: Any, start_xy: Any, ) -> XYArray | None:
+def orient_polyline(polyline: Any, start_xy: Any, end_xy: Any, ) -> XYArray | None:
+    """Orient a polyline from start_xy toward end_xy."""
     points = as_xy_array(polyline)
     start = _as_xy_point(start_xy)
+    end = _as_xy_point(end_xy)
 
-    if points is None or start is None:
+    if points is None or start is None or end is None:
         return None
 
-    first_error = float(np.linalg.norm(points[0] - start))
-    last_error = float(np.linalg.norm(points[-1] - start))
+    forward_error = float(np.linalg.norm(points[0] - start) + np.linalg.norm(points[-1] - end))
+    reverse_error = float(np.linalg.norm(points[-1] - start) + np.linalg.norm(points[0] - end))
 
-    if last_error < first_error:
-        return np.ascontiguousarray(points[::-1], dtype=np.float64)
+    if reverse_error < forward_error:
+        return _contiguous_float64(points[::-1])
 
     return points
 
 
 def polyline_length(polyline: Any) -> float:
-    points = _as_xy_point(polyline)
+    points = as_xy_array(polyline)
     if points is None:
-        return float('inf')
-    return float(np.sum(np.linalg.norm(np.diff(points, axis=0), axis=1)))
+        return float("inf")
+
+    vectors = _float64_array(np.diff(points, axis=0))
+    lengths = _float64_array(np.linalg.norm(vectors, axis=1))
+    return float(np.sum(lengths))
 
 
 def sample_polyline_by_arclength(polyline: Any, samples: int) -> XYArray | None:
-    points = _as_xy_point(polyline)
+    points = as_xy_point(polyline)
     if points is None:
         return None
     vectors = np.diff(points, axis=0)
@@ -144,8 +158,7 @@ def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
     if not np.any(valid):
         return None
 
-    return (np.ascontiguousarray(starts[valid], dtype=np.float64), np.ascontiguousarray(vectors[valid], dtype=np.float64),
-            np.ascontiguousarray(squared_lengths[valid], dtype=np.float64))
+    return _contiguous_float64(starts[valid]), _contiguous_float64(vectors[valid]), _contiguous_float64(squared_lengths[valid])
 
 
 def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None) -> float:
@@ -153,26 +166,29 @@ def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedP
     if coordinates is None or prepared_polyline is None:
         return float('inf')
     starts, vectors, squared_lengths = prepared_polyline
-    projection = np.sum((coordinates - starts) * vectors, axis=0) / squared_lengths
-    projection = np.clip(projection, 0, 1)
-    offsets = (starts + projection[:, None] * vectors - coordinates)
-    squared_distances = np.einsum("ij,ij->i", offsets, offsets)
+    relative = _float64_array(coordinates[None, :] - starts)
+    projection = _float64_array(np.einsum("ij,ij->i", relative, vectors) / squared_lengths)
+    projection = _float64_array(np.clip(projection, 0, 1))
+    closest_points = _float64_array(starts + projection[:, None] * vectors)
+    offsets = _float64_array(closest_points - coordinates[None, :])
+    squared_distances = _float64_array(np.einsum("ij,ij->i", offsets, offsets))
+
     return math.sqrt(float(np.min(squared_distances)))
 
 
-def points_to_prepared_polyline_distances(points: Any, prepared_polyline: PreparedPolyline | None, *, chunk_size: int = 256) -> XYArray | None:
+def points_to_prepared_polyline_distances(points: Any, prepared_polyline: PreparedPolyline | None, *, chunk_size: int = 256) -> FloatArray | None:
     if prepared_polyline is None:
         return None
 
     try:
-        query_points = np.asarray(points, dtype=np.float64)
+        query_points = _float64_array(points)
     except (ValueError, TypeError):
         return None
 
     if (query_points.ndim != 2) or (query_points.shape[1] < 2) or len(query_points) == 0:
         return None
 
-    query_points = np.ascontiguousarray(query_points[:, :2], dtype=np.float64)
+    query_points = _contiguous_float64(query_points[:, :2])
     if not np.all(np.isfinite(query_points)):
         return None
 
@@ -182,10 +198,19 @@ def points_to_prepared_polyline_distances(points: Any, prepared_polyline: Prepar
 
     for start_index in range(0, len(query_points), normalized_chunk_size):
         chunk = query_points[start_index:start_index + normalized_chunk_size]
-        point_offsets = chunk[:, None, :] - starts[None, :, :]
-        projection = np.einsum("pse, se->ps", point_offsets, vectors) / squared_lengths[None, :]
-        projection = np.clip(projection, 0, 1)
-        closest_offsets = starts[None, :, :] + projection[:, :, None] * vectors[None, :, :] - chunk[:, None, :]
+        point_offsets = _float64_array(np.expand_dims(chunk, axis=1) - np.expand_dims(starts, axis=0))
+
+        projection_numerators = _float64_array(np.einsum("pse,se->ps", point_offsets, vectors))
+        projection_denominators = _float64_array(np.expand_dims(squared_lengths, axis=0))
+        projection = _float64_array(projection_numerators / projection_denominators)
+        projection = _float64_array(np.clip(projection, 0.0, 1.0))
+
+        expanded_starts = _float64_array(np.expand_dims(starts, axis=0))
+        expanded_projection = _float64_array(np.expand_dims(projection, axis=2))
+        expanded_vectors = _float64_array(np.expand_dims(vectors, axis=0))
+        expanded_chunk = _float64_array(np.expand_dims(chunk, axis=1))
+
+        closest_offsets = _float64_array(expanded_starts + expanded_projection * expanded_vectors - expanded_chunk)
         squared_distances = np.einsum("psi, psi->ps", closest_offsets, closest_offsets)
         distances[start_index:start_index + len(chunk)] = np.sqrt(np.min(squared_distances, axis=1))
     return distances
@@ -207,14 +232,17 @@ def closest_segment_distance_and_tangent(point: Any, polyline: Any) -> tuple[flo
         return float('inf'), None
 
     starts, vectors, squared_lengths = prepared
-    projection = np.sum((coordinates - starts) * vectors, axis=1) / squared_lengths
-    projection = np.clip(projection, 0, 1)
-    closest = starts + projection[:, None] * vectors
+    relative = _float64_array(coordinates[None, :] - starts)
+    projection_numerators = _float64_array(np.einsum("ij,ij->i", relative, vectors))
+    projection = _float64_array(projection_numerators / squared_lengths)
+    projection = _float64_array(np.clip(projection, 0.0, 1.0))
+    expanded_projection = _float64_array(np.expand_dims(projection, axis=1))
+    closest = _float64_array(starts + expanded_projection * vectors)
     distances = np.linalg.norm(closest - coordinates, axis=1)
     best = int(np.argmin(distances))
     segment_length = math.sqrt(float(squared_lengths[best]))
     if segment_length < 1e-12:
         return float(distances[best]), None
 
-    tangent = np.ascontiguousarray(vectors[best] / segment_length, dtype=np.float64)
+    tangent = _contiguous_float64(vectors[best] / segment_length)
     return float(distances[best]), tangent
