@@ -5,9 +5,19 @@ import math
 import numpy as np
 import pytest
 
-from river_matcher.geometry import (as_xy_array, closest_segment_distance_and_tangent, orient_polyline, point_to_polyline_distance, point_to_prepared_polyline_distance,
-                                    points_to_prepared_polyline_distances, polyline_length, prepare_polyline_segments, sample_polyline_by_arclength, sample_polyline_with_tangents,
-                                    PreparedPolyline, )
+from river_matcher.geometry import (
+    PreparedPolyline,
+    as_xy_array,
+    closest_segment_distance_and_tangent,
+    orient_polyline,
+    point_to_polyline_distance,
+    point_to_prepared_polyline_distance,
+    points_to_prepared_polyline_distances,
+    polyline_length,
+    prepare_polyline_segments,
+    sample_polyline_by_arclength,
+    sample_polyline_with_tangents,
+)
 
 
 def test_as_xy_array_normalizes_dtype_layout_and_extra_columns() -> None:

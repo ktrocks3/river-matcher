@@ -46,7 +46,7 @@ dev = [
 
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 
 [tool.setuptools.packages.find]
@@ -63,18 +63,11 @@ addopts = [
 
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 180
 
-
 [tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "I",
-    "B",
-    "UP",
-]
+select = ["E", "F", "I", "UP", "B"]
 
 
 [tool.ruff.format]

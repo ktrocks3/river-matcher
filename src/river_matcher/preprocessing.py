@@ -167,7 +167,10 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 continue
 
             edge = edges[edge_index]
-            polyline = orient_polyline(edge["path"], vertices[start])
+            polyline = orient_polyline(edge["path"], vertices[start], vertices[neighbour], )
+
+            if polyline is None:
+                raise RuntimeError(f"Could not orient raw edge {edge['id']} from vertex {start} to vertex {neighbour}.")
             raw_edge_ids = [int(edge["id"])]
             chain_vertices = [start, neighbour]
 
@@ -184,7 +187,9 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 if next_edge_index in visited_edges:
                     raise RuntimeError(f"Raw edge {edges[next_edge_index]['id']} was encountered twice during compression.")
                 next_edge = edges[next_edge_index]
-                next_polyline = orient_polyline(next_edge["path"], vertices[current])
+                next_polyline = orient_polyline(next_edge["path"], vertices[current], vertices[next_vertex], )
+                if next_polyline is None:
+                    raise RuntimeError(f"Could not orient raw edge {next_edge['id']} from vertex {current} to vertex {next_vertex}.")
                 polyline = _concatenate_polyline(polyline, next_polyline)
                 raw_edge_ids.append(int(next_edge['id']))
                 chain_vertices.append(next_vertex)

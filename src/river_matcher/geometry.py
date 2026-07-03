@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 type FloatArray = NDArray[np.float64]
 type XYArray = NDArray[np.float64]
 type PreparedPolyline = tuple[XYArray, XYArray, FloatArray]
+type IndexArray = NDArray[np.intp]
 
 _DUPLICATE_SQUARED_TOLERANCE = 1e-24
 _SEGMENT_SQUARED_TOLERANCE = 1e-12
@@ -20,6 +21,10 @@ def _float64_array(value: Any) -> FloatArray:
 
 def _contiguous_float64(value: Any) -> FloatArray:
     return cast(FloatArray, np.ascontiguousarray(value, dtype=np.float64))
+
+
+def _index_array(value: Any) -> IndexArray:
+    return cast(IndexArray, np.asarray(value, dtype=np.intp))
 
 
 def as_xy_array(polyline: Any) -> XYArray | None:
@@ -95,55 +100,88 @@ def polyline_length(polyline: Any) -> float:
     return float(np.sum(lengths))
 
 
-def sample_polyline_by_arclength(polyline: Any, samples: int) -> XYArray | None:
-    points = as_xy_point(polyline)
+def sample_polyline_by_arclength(polyline: Any, samples: int, ) -> XYArray | None:
+    """Sample a polyline at equally spaced arclength positions."""
+    points = as_xy_array(polyline)
+
     if points is None:
         return None
-    vectors = np.diff(points, axis=0)
-    lengths = np.linalg.norm(vectors, axis=1)
+
+    vectors = _float64_array(np.diff(points, axis=0))
+    lengths = _float64_array(np.linalg.norm(vectors, axis=1))
     valid = lengths > 1e-12
 
-    vectors = vectors[valid]
-    lengths = lengths[valid]
-    starts = points[:-1][valid]
+    vectors = _contiguous_float64(vectors[valid])
+    lengths = _contiguous_float64(lengths[valid])
+    starts = _contiguous_float64(points[:-1][valid])
+
+    if len(lengths) == 0:
+        return None
 
     total = float(np.sum(lengths))
-    if len(lengths) == 0 or not math.isfinite(total) or total <= 1e-12:
+
+    if not math.isfinite(total) or total <= 1e-12:
         return None
 
     sample_count = max(2, int(samples))
-    requested = np.linspace(0.0, total, sample_count, dtype=np.float64)
-    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths)))
-    segment_indices = (np.searchsorted(cumulative, requested, side='right') - 1)
-    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
-    fractions = (requested - cumulative[segment_indices]) / lengths[segment_indices]
-    sampled = (starts[segment_indices] + fractions[:, None] * vectors[segment_indices])
-    return np.ascontiguousarray(sampled, dtype=np.float64)
+    requested = _float64_array(np.linspace(0.0, total, sample_count, dtype=np.float64))
+    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths),)))
+
+    segment_indices = _float64_array(np.searchsorted(cumulative, requested, side="right") - 1).astype(np.intp)
+    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1, )
+
+    fractions = _float64_array((requested - cumulative[segment_indices]) / lengths[segment_indices])
+    expanded_fractions = _float64_array(np.expand_dims(fractions, axis=1))
+
+    sampled = _float64_array(starts[segment_indices] + expanded_fractions * vectors[segment_indices])
+
+    # Avoid tiny endpoint drift from interpolation.
+    sampled[0] = points[0]
+    sampled[-1] = points[-1]
+
+    return _contiguous_float64(sampled)
 
 
-def sample_polyline_with_tangents(polyline: Any, samples: int) -> tuple[XYArray | None, XYArray | None]:
-    points = _as_xy_point(polyline)
+def sample_polyline_with_tangents(polyline: Any, samples: int, ) -> tuple[XYArray | None, XYArray | None]:
+    """Return equal-arclength samples and unit segment tangents."""
+    points = as_xy_array(polyline)
+
     if points is None:
         return None, None
-    vectors = np.diff(points, axis=0)
-    lengths = np.linalg.norm(vectors, axis=1)
+
+    vectors = _float64_array(np.diff(points, axis=0))
+    lengths = _float64_array(np.linalg.norm(vectors, axis=1))
     valid = lengths > 1e-12
 
-    vectors = vectors[valid]
-    lengths = lengths[valid]
-    starts = points[:-1][valid]
-    total = float(np.sum(lengths))
-    if len(lengths) == 0 or not math.isfinite(total) or total <= 1e-12:
+    vectors = _contiguous_float64(vectors[valid])
+    lengths = _contiguous_float64(lengths[valid])
+    starts = _contiguous_float64(points[:-1][valid])
+
+    if len(lengths) == 0:
         return None, None
+
+    total = float(np.sum(lengths))
+
+    if not math.isfinite(total) or total <= 1e-12:
+        return None, None
+
     sample_count = max(2, int(samples))
-    requested = np.linspace(0.0, total, sample_count, dtype=np.float64)
-    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths)))
-    segment_indices = (np.searchsorted(cumulative, requested, side='right') - 1)
-    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
-    fractions = (requested - cumulative[segment_indices]) / lengths[segment_indices]
-    sampled = (starts[segment_indices] + fractions[:, None] * vectors[segment_indices])
-    tangents = (vectors[segment_indices] / lengths[segment_indices, None])
-    return np.ascontiguousarray(sampled, dtype=np.float64), np.ascontiguousarray(tangents, dtype=np.float64)
+    requested = _float64_array(np.linspace(0.0, total, sample_count, dtype=np.float64))
+    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths),)))
+
+    segment_indices = _index_array(np.searchsorted(cumulative, requested, side="right") - 1)
+    segment_indices = _index_array(np.clip(segment_indices, 0, len(lengths) - 1))
+
+    fractions = _float64_array((requested - cumulative[segment_indices]) / lengths[segment_indices])
+    expanded_fractions = _float64_array(np.expand_dims(fractions, axis=1))
+
+    sampled = _float64_array(starts[segment_indices] + expanded_fractions * vectors[segment_indices])
+    tangents = _float64_array(vectors[segment_indices] / np.expand_dims(lengths[segment_indices], axis=1))
+
+    sampled[0] = points[0]
+    sampled[-1] = points[-1]
+
+    return _contiguous_float64(sampled), _contiguous_float64(tangents),
 
 
 def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
@@ -161,16 +199,23 @@ def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
     return _contiguous_float64(starts[valid]), _contiguous_float64(vectors[valid]), _contiguous_float64(squared_lengths[valid])
 
 
-def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None) -> float:
-    coordinates = as_xy_array(point)
+def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None, ) -> float:
+    """Return the Euclidean distance from one point to a prepared polyline."""
+    coordinates = _as_xy_point(point)
+
     if coordinates is None or prepared_polyline is None:
-        return float('inf')
+        return float("inf")
+
     starts, vectors, squared_lengths = prepared_polyline
-    relative = _float64_array(coordinates[None, :] - starts)
+    expanded_coordinates = _float64_array(np.expand_dims(coordinates, axis=0))
+    relative = _float64_array(expanded_coordinates - starts)
+
     projection = _float64_array(np.einsum("ij,ij->i", relative, vectors) / squared_lengths)
-    projection = _float64_array(np.clip(projection, 0, 1))
-    closest_points = _float64_array(starts + projection[:, None] * vectors)
-    offsets = _float64_array(closest_points - coordinates[None, :])
+    projection = _float64_array(np.clip(projection, 0.0, 1.0))
+    expanded_projection = _float64_array(np.expand_dims(projection, axis=1))
+
+    closest_points = _float64_array(starts + expanded_projection * vectors)
+    offsets = _float64_array(closest_points - expanded_coordinates)
     squared_distances = _float64_array(np.einsum("ij,ij->i", offsets, offsets))
 
     return math.sqrt(float(np.min(squared_distances)))
