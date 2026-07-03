@@ -92,7 +92,7 @@ def read_topotide_graph(path: str | Path) -> RawGraph:
 
         vertices[vertex_id] = coordinates
 
-    line_number, text = next_line(f"the edge count")
+    line_number, text = next_line("the edge count")
     edge_count = _parse_nonnegative_count(text, line_number, "edge")
     edges: RawEdges = []
     seen_edges_id: set[int] = set()

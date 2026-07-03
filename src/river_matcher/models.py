@@ -28,11 +28,11 @@ def _clean_polyline(polyline: XYArray) -> tuple[XYArray, float]:
     try:
         points = np.asarray(polyline, dtype=np.float64)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f'A polyline must contain numeric coordinates') from exc
+        raise ValueError('A polyline must contain numeric coordinates') from exc
     if points.ndim != 2 or points.shape[1] != 2 or len(points) < 2:
         raise ValueError(f"A polyline must have shape (n, 2) with n >= 2, got {points.shape}.")
     if not np.all(np.isfinite(points)):
-        raise ValueError(f"A polyline cannot contain NaN or infinite coordinates.")
+        raise ValueError("A polyline cannot contain NaN or infinite coordinates.")
 
     # Remove consecutive duplicates because they create zero-length segments.
     keep = [0]
@@ -95,7 +95,7 @@ class JunctionGraph:
     def __post_init__(self) -> None:
         name = str(self.name).strip()
         if not name:
-            raise ValueError(f"Junction graph must have a name")
+            raise ValueError("Junction graph must have a name")
 
         coordinates: Coordinates = {}
         for raw_vertex, raw_point in self.coordinates.items():
@@ -116,7 +116,7 @@ class JunctionGraph:
             coordinates[vertex] = (float(point[0]), float(point[1]))
 
         if not coordinates:
-            raise ValueError(f"Junction graph must contain at least one vertex")
+            raise ValueError("Junction graph must contain at least one vertex")
 
         edges = tuple(self.edges)
         edge_by_id: dict[EdgeId, JunctionEdge] = {}
@@ -163,7 +163,7 @@ class MatchResult:
                 raise ValueError("A feasible match cannot contain non-finite edge costs: {invalid_edges}.")
         else:
             if value != float("inf"):
-                raise ValueError(f"An infeasible match must use positive infinity as its value.")
+                raise ValueError("An infeasible match must use positive infinity as its value.")
             if phi:
                 raise ValueError("An infeasible match cannot contain a vertex mapping")
             if edge_costs:

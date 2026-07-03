@@ -49,6 +49,9 @@ dev = [
 package-dir = { "" = "src" }
 
 
+[tool.setuptools.package-data]
+river_matcher = ["py.typed"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

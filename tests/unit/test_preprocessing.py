@@ -5,7 +5,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from river_matcher.preprocessing import (compress_degree_two_chains, filter_raw_graph, load_junction_graph, preprocess_raw_graph, )
+from river_matcher.preprocessing import (
+    compress_degree_two_chains,
+    filter_raw_graph,
+    load_junction_graph,
+    preprocess_raw_graph,
+)
 
 
 def raw_edge(edge_id: int, u: int, v: int, path: object, delta: float = 1.0, ) -> dict:

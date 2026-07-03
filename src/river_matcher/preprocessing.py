@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
-from river_matcher.graph_io import RawEdge, RawEdges, RawVertices, read_topotide_graph
-from river_matcher.models import JunctionGraph, JunctionEdge
 from river_matcher.geometry import orient_polyline
+from river_matcher.graph_io import RawEdge, RawEdges, RawVertices, read_topotide_graph
+from river_matcher.models import JunctionEdge, JunctionGraph
 
 type XYArray = NDArray[np.float64]
 type Adjacency = dict[int, list[tuple[int, int]]]

@@ -4,16 +4,23 @@ import argparse
 import importlib.util
 import math
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from river_matcher.geometry import (closest_segment_distance_and_tangent, point_to_prepared_polyline_distance, points_to_prepared_polyline_distances, prepare_polyline_segments,
-                                    sample_polyline_by_arclength, sample_polyline_with_tangents)
+from river_matcher.geometry import (
+    closest_segment_distance_and_tangent,
+    point_to_prepared_polyline_distance,
+    points_to_prepared_polyline_distances,
+    prepare_polyline_segments,
+    sample_polyline_by_arclength,
+    sample_polyline_with_tangents,
+)
 from river_matcher.preprocessing import load_junction_graph
 
 type FloatArray = NDArray[np.float64]

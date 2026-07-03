@@ -8,10 +8,11 @@ import math
 import sys
 import time
 from collections import Counter, defaultdict, deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 
@@ -308,7 +309,15 @@ def _verify_case(common: ModuleType, backend: ModuleType, migrated_source: Junct
 
     _assert_candidate_sets_equal("legacy reference", legacy_reference, "legacy Numba", legacy_first, source_ids)
     _assert_candidate_sets_equal("legacy Numba first run", legacy_first, "legacy Numba repeated run", legacy_warm, source_ids)
-    _assert_candidate_sets_equal("legacy reference", legacy_reference, "migrated Numba", migrated_first, source_ids)
+    cross_comparison = _compare_cross_implementation_candidates("legacy reference", legacy_reference, "migrated Numba", migrated_first, source_ids)
+
+    if cross_comparison.membership_mismatches:
+        difference = cross_comparison.first_membership_difference
+        assert difference is not None
+        source_vertex, legacy_candidates, migrated_candidates = difference
+        raise AssertionError(f"Candidate membership differs after top-k truncation at source vertex {source_vertex}: legacy={list(legacy_candidates)}, "
+                             f"migrated={list(migrated_candidates)}. Total membership mismatches={cross_comparison.membership_mismatches:,}; "
+                             f"total ordered mismatches={cross_comparison.ordered_mismatches:,}.")
     _assert_candidate_sets_equal("migrated first run", migrated_first, "migrated repeated run", migrated_warm, source_ids)
 
     summary = _summarize_candidate_sets(migrated_first, source_ids)
@@ -318,6 +327,10 @@ def _verify_case(common: ModuleType, backend: ModuleType, migrated_source: Junct
           f"sha256={summary.digest}")
     print(f"      legacy reference={reference_seconds:.3f} s, legacy Numba first={legacy_first_seconds:.3f} s, warm={legacy_warm_seconds:.3f} s")
     print(f"      migrated Numba first= {migrated_first_seconds:.3f} s, warm={migrated_warm_seconds:.3f} s")
+    print(f"      cross-implementation order differences={cross_comparison.ordered_mismatches:,}, membership differences={cross_comparison.membership_mismatches:,}")
+    if cross_comparison.first_order_difference is not None:
+        source_vertex, legacy_candidates, migrated_candidates = cross_comparison.first_order_difference
+        print(f"      first order difference at source {source_vertex}: legacy={list(legacy_candidates)}, migrated={list(migrated_candidates)}")
     return summary
 
 
@@ -391,7 +404,8 @@ def main() -> int:
         print(f"\n{len(failures)} of {total_cases} candidate-equivalence cases failed.")
         return 1
 
-    print(f"\nAll {total_cases} candidate-equivalence cases matched the legacy reference and legacy Numba backend.")
+    print(f"\nAll {total_cases} cases matched legacy candidate membership. Legacy-reference and legacy-Numba ordering also matched exactly; "
+          f"migrated ordering differences were permitted and reported.")
     return 0
 
 

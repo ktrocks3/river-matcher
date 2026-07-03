@@ -6,14 +6,26 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from types import ModuleType
+from typing import Any, Mapping, Protocol, Sequence, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
+from river_matcher.models import JunctionGraph
 from river_matcher.preprocessing import load_junction_graph
 
 type XYArray = NDArray[np.float64]
 type EdgeGeometry = tuple[float, XYArray]
+type FloatArray = NDArray[np.float64]
+type LegacyEdge = Mapping[str, Any]
+
+
+class LegacyGraphData(Protocol):
+    """Structural type for river_graph_matcher_app_v6.GraphData."""
+    vertices: Mapping[int, tuple[float, float]]
+    nodes: set[int]
+    edges: Sequence[LegacyEdge]
+    edge_polylines: Mapping[int, FloatArray]
 
 
 def load_legacy_app(legacy_root: Path) -> ModuleType:
@@ -97,7 +109,7 @@ def geometry_sort_key(record: EdgeGeometry) -> tuple:
     return round(length, 12), len(polyline), rounded,
 
 
-def legacy_edge_groups(graph: object) -> dict[tuple[int, int], list[EdgeGeometry]]:
+def legacy_edge_groups(graph: LegacyGraphData) -> dict[tuple[int, int], list[EdgeGeometry]]:
     groups: dict[tuple[int, int], list[EdgeGeometry]] = defaultdict(list)
 
     for edge in graph.edges:
@@ -120,7 +132,7 @@ def legacy_edge_groups(graph: object) -> dict[tuple[int, int], list[EdgeGeometry
     return dict(groups)
 
 
-def migrated_edge_groups(graph: object) -> dict[tuple[int, int], list[EdgeGeometry]]:
+def migrated_edge_groups(graph: JunctionGraph) -> dict[tuple[int, int], list[EdgeGeometry]]:
     groups: dict[tuple[int, int], list[EdgeGeometry]] = defaultdict(list)
 
     for edge in graph.edges:
@@ -134,7 +146,7 @@ def migrated_edge_groups(graph: object) -> dict[tuple[int, int], list[EdgeGeomet
     return dict(groups)
 
 
-def compare_coordinates(legacy_graph: object, migrated_graph: object, *, atol: float, ) -> None:
+def compare_coordinates(legacy_graph: LegacyGraphData, migrated_graph: JunctionGraph, *, atol: float, ) -> None:
     legacy_nodes = {int(vertex) for vertex in legacy_graph.nodes}
     migrated_nodes = set(migrated_graph.vertices)
 
@@ -193,7 +205,7 @@ def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) ->
     if not graph_path.is_file():
         raise FileNotFoundError(f"Graph file does not exist: {graph_path}")
 
-    legacy_graph = legacy_app.preprocess_graph(graph_path)
+    legacy_graph = cast(LegacyGraphData, legacy_app.preprocess_graph_file(graph_path), )
     migrated_graph = load_junction_graph(graph_path)
 
     if migrated_graph.name != graph_path.stem:
