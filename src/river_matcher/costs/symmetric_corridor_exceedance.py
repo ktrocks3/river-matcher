@@ -11,7 +11,7 @@ from river_matcher.witnesses import SourceGuidedWitnessFinder
 
 @njit(cache=True, fastmath=False)
 def _directed_mean_corridor_exceedance(
-    sample_points: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: FloatArray, corridor_radius: float
+    sample_points: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: FloatArray, corridor_radius: float,
 ) -> float:
     sample_count = sample_points.shape[0]
     segment_count = segment_starts.shape[0]

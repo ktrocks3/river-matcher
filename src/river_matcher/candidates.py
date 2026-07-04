@@ -96,7 +96,7 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
 
 @njit(cache=True, parallel=True, fastmath=False)
 def _candidate_edge_distances_numba(
-    source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray, rho: float
+    source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray, rho: float,
 ) -> FloatArray:
     """Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
     point-to-segment projection."""
@@ -184,7 +184,7 @@ def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> flo
 
 
 def _point_to_packed_edge_distance(
-    point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray
+    point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray,
 ) -> float:
     """Reference point-to-edge distance using the packed segment arrays."""
     px, py = point

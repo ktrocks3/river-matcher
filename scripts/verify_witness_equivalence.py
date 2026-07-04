@@ -274,7 +274,7 @@ def _build_request_pairs(edge_matches: Sequence[EdgeMatch], candidates: Candidat
                     skipped_equal += 1
                     continue
                 requests.append(
-                    RequestPair(legacy=(match.legacy_id, match.u, match.v, target_start, target_end), migrated=(match.migrated_id, match.u, match.v, target_start, target_end))
+                    RequestPair(legacy=(match.legacy_id, match.u, match.v, target_start, target_end), migrated=(match.migrated_id, match.u, match.v, target_start, target_end)),
                 )
 
     return requests, skipped_equal
@@ -481,7 +481,7 @@ def _verify_direction(
     edge_matches = _match_source_edges(legacy_source, migrated_source, atol=atol)
     source_vertices = sorted(migrated_source.vertices)
     legacy_candidates = _normalize_candidate_sets(
-        legacy_app.compute_candidate_sets_numba(legacy_source.vertices, legacy_source.nodes, legacy_target.vertices, legacy_target.edges, rho=rho, top_k=top_k)
+        legacy_app.compute_candidate_sets_numba(legacy_source.vertices, legacy_source.nodes, legacy_target.vertices, legacy_target.edges, rho=rho, top_k=top_k),
     )
     migrated_candidates = compute_candidate_sets(migrated_source, migrated_target, rho=rho, top_k=top_k)
     candidates = _verify_candidate_membership(legacy_candidates, migrated_candidates, source_vertices)
@@ -581,15 +581,15 @@ def main() -> int:
         print(f"{status}  {label}: rho={args.rho:g}, top_k={args.top_k}, edge_samples={args.edge_samples}")
         print(
             f"      source edges={summary.source_edges:,}, guided requests={summary.requests:,}, "
-            f"skipped equal-endpoint pairs={summary.skipped_equal_pairs:,}, ordinary target pairs={summary.ordinary_pairs:,}"
+            f"skipped equal-endpoint pairs={summary.skipped_equal_pairs:,}, ordinary target pairs={summary.ordinary_pairs:,}",
         )
         print(
             f"      ordinary legacy={summary.ordinary_seconds[0]:.3f} s, migrated={summary.ordinary_seconds[1]:.3f} s; "
-            f"guided legacy={summary.guided_seconds[0]:.3f} s, migrated={summary.guided_seconds[1]:.3f} s"
+            f"guided legacy={summary.guided_seconds[0]:.3f} s, migrated={summary.guided_seconds[1]:.3f} s",
         )
         print(
             f"      guided cache counts: legacy adjacency={summary.legacy_adjacency_builds:,}, Dijkstra={summary.legacy_dijkstra_runs:,}; "
-            f"migrated adjacency={summary.migrated_adjacency_builds:,}, Dijkstra={summary.migrated_dijkstra_runs:,}"
+            f"migrated adjacency={summary.migrated_adjacency_builds:,}, Dijkstra={summary.migrated_dijkstra_runs:,}",
         )
         print(f"      ordinary geometry comparisons={ordinary_stats.total:,}, legacy/migrated differences={ordinary_stats.mismatches:,}")
         print(f"      guided path comparisons={guided_stats.total:,}, mismatches={guided_stats.mismatches:,}, cache errors={len(cache_errors):,}")
@@ -608,7 +608,7 @@ def main() -> int:
 
     print(
         "\nBoth graph directions matched legacy source-guided witness geometry, determinism, reverse behavior and cache counts. "
-        "Ordinary legacy reconstruction differences were reported separately."
+        "Ordinary legacy reconstruction differences were reported separately.",
     )
     return 0
 

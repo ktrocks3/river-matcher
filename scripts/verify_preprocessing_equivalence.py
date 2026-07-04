@@ -195,7 +195,7 @@ def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry
 
             if legacy_polyline.shape != migrated_polyline.shape:
                 raise AssertionError(
-                    f"Polyline shape differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_polyline.shape}, migrated={migrated_polyline.shape}."
+                    f"Polyline shape differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_polyline.shape}, migrated={migrated_polyline.shape}.",
                 )
 
             if not np.allclose(legacy_polyline, migrated_polyline, rtol=0.0, atol=atol):

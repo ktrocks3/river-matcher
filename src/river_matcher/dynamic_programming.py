@@ -172,7 +172,7 @@ def _recover_solution(decomposition: SourceDecomposition, messages: AllMessages,
 
 
 def _solve(
-    decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...]
+    decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...],
 ) -> tuple[dict[Objective, DPSolution | None], DPStatistics]:
     if not objectives:
         raise ValueError("At least one objective must be requested.")

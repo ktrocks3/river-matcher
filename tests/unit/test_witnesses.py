@@ -50,7 +50,7 @@ def arch_target() -> JunctionGraph:
 
 def parallel_source_graph() -> JunctionGraph:
     return make_graph(
-        "source", {1: (0.0, 0.0), 2: (4.0, 0.0)}, (make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 2.0), (4.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (2.0, -2.0), (4.0, 0.0)]))
+        "source", {1: (0.0, 0.0), 2: (4.0, 0.0)}, (make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 2.0), (4.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (2.0, -2.0), (4.0, 0.0)])),
     )
 
 
@@ -107,7 +107,7 @@ def test_shortest_path_parallel_edges_keep_selected_geometry() -> None:
 
 def test_equal_length_parallel_edges_use_first_stored_edge() -> None:
     target = make_graph(
-        "parallel-tie", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]), make_edge(1, 10, 20, [(0.0, 0.0), (1.0, -1.0), (2.0, 0.0)]))
+        "parallel-tie", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]), make_edge(1, 10, 20, [(0.0, 0.0), (1.0, -1.0), (2.0, 0.0)])),
     )
     finder = ShortestPathWitnessFinder(target)
 

@@ -20,7 +20,7 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
     source = JunctionGraph(
-        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])),
     )
     target = JunctionGraph(
         name="target",
@@ -39,7 +39,7 @@ def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
 def make_cost(*, rho: float = 2.0, edge_samples: int = 12, curve_samples: int = 33, warping_window: int | None = 8, normalize: bool = True) -> DynamicTimeWarpingDistance:
     source, target = make_graphs()
     cost = CostFactory(source, target).create(
-        CostName.DYNAMIC_TIME_WARPING_DISTANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples, warping_window=warping_window, normalize=normalize
+        CostName.DYNAMIC_TIME_WARPING_DISTANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples, warping_window=warping_window, normalize=normalize,
     )
     assert isinstance(cost, DynamicTimeWarpingDistance)
     return cost
@@ -60,7 +60,7 @@ def dynamic_time_warping_reference(first: FloatArray, second: FloatArray) -> flo
             difference = first[first_index - 1] - second[second_index - 1]
             local_cost = float(np.dot(difference, difference))
             table[first_index, second_index] = local_cost + min(
-                table[first_index - 1, second_index], table[first_index, second_index - 1], table[first_index - 1, second_index - 1]
+                table[first_index - 1, second_index], table[first_index, second_index - 1], table[first_index - 1, second_index - 1],
             )
 
     return math.sqrt(float(table[-1, -1]))

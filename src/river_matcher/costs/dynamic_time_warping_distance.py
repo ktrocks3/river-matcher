@@ -22,7 +22,7 @@ class DynamicTimeWarpingDistance(BaseEdgeCost):
     label = "normalized dynamic time warping distance"
 
     def __init__(
-        self, resources: CostResources, *, rho: float = 10.0, edge_samples: int = 12, curve_samples: int = 80, warping_window: int | None = 8, normalize: bool = True
+        self, resources: CostResources, *, rho: float = 10.0, edge_samples: int = 12, curve_samples: int = 80, warping_window: int | None = 8, normalize: bool = True,
     ) -> None:
         super().__init__(resources)
 

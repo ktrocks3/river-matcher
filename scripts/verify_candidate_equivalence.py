@@ -53,7 +53,7 @@ class CandidateSummary:
 
 
 def _compare_cross_implementation_candidates(
-    expected_label: str, expected: CandidateSets, actual_label: str, actual: CandidateSets, source_ids: list[int]
+    expected_label: str, expected: CandidateSets, actual_label: str, actual: CandidateSets, source_ids: list[int],
 ) -> CrossImplementationComparison:
     _assert_complete_candidate_sets(expected_label, expected, source_ids)
     _assert_complete_candidate_sets(actual_label, actual, source_ids)
@@ -271,7 +271,7 @@ def _assert_candidate_sets_equal(expected_label: str, expected: CandidateSets, a
         difference = _first_list_difference(expected_candidates, actual_candidates)
 
         raise AssertionError(
-            f"Candidate sets differ at source vertex {source_vertex}, list index {difference}: {expected_label}={expected_candidates}, {actual_label}={actual_candidates}."
+            f"Candidate sets differ at source vertex {source_vertex}, list index {difference}: {expected_label}={expected_candidates}, {actual_label}={actual_candidates}.",
         )
 
 
@@ -345,7 +345,7 @@ def _verify_case(
         raise AssertionError(
             f"Candidate membership differs after top-k truncation at source vertex {source_vertex}: legacy={list(legacy_candidates)}, "
             f"migrated={list(migrated_candidates)}. Total membership mismatches={cross_comparison.membership_mismatches:,}; "
-            f"total ordered mismatches={cross_comparison.ordered_mismatches:,}."
+            f"total ordered mismatches={cross_comparison.ordered_mismatches:,}.",
         )
     _assert_candidate_sets_equal("migrated first run", migrated_first, "migrated repeated run", migrated_warm, source_ids)
 
@@ -354,7 +354,7 @@ def _verify_case(
     print(f"PASS  {legacy_source.name} -> {legacy_target.name}: rho={rho:g}, top_k={top_k}")
     print(
         f"      vertices={summary.vertices:,}, empty={summary.empty:,}, total={summary.total:,}, min={summary.minimum}, median={summary.median:.1f}, max={summary.maximum}, "
-        f"sha256={summary.digest}"
+        f"sha256={summary.digest}",
     )
     print(f"      legacy reference={reference_seconds:.3f} s, legacy Numba first={legacy_first_seconds:.3f} s, warm={legacy_warm_seconds:.3f} s")
     print(f"      migrated Numba first= {migrated_first_seconds:.3f} s, warm={migrated_warm_seconds:.3f} s")
@@ -421,7 +421,7 @@ def main() -> int:
         for rho, top_k in cases:
             try:
                 _verify_case(
-                    common, backend, migrated_graphs[source_path], migrated_graphs[target_path], legacy_graphs[source_path], legacy_graphs[target_path], rho=rho, top_k=top_k
+                    common, backend, migrated_graphs[source_path], migrated_graphs[target_path], legacy_graphs[source_path], legacy_graphs[target_path], rho=rho, top_k=top_k,
                 )
             except Exception as exc:
                 label = f"{source_path.stem} -> {target_path.stem}, rho={rho:g}, top_k={top_k}"
@@ -438,7 +438,7 @@ def main() -> int:
 
     print(
         f"\nAll {total_cases} cases matched legacy candidate membership. Legacy-reference and legacy-Numba ordering also matched exactly; "
-        f"migrated ordering differences were permitted and reported."
+        f"migrated ordering differences were permitted and reported.",
     )
     return 0
 

@@ -196,7 +196,7 @@ def _compare_distances(legacy: ModuleType, polyline: FloatArray, queries: FloatA
         legacy_closest_distance, legacy_tangent = legacy_closest(point, polyline)
 
         distance_error = _scalar_error(
-            migrated_closest_distance, float(legacy_closest_distance), label=f"{graph_name} edge e{edge_id} closest distance query {query_index}", atol=atol
+            migrated_closest_distance, float(legacy_closest_distance), label=f"{graph_name} edge e{edge_id} closest distance query {query_index}", atol=atol,
         )
         tangent_error = _array_error(migrated_tangent, legacy_tangent, label=f"{graph_name} edge e{edge_id} closest tangent query {query_index}", atol=atol)
 

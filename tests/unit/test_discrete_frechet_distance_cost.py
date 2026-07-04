@@ -19,7 +19,7 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
     source = JunctionGraph(
-        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])),
     )
     target = JunctionGraph(
         name="target",

@@ -167,7 +167,7 @@ def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Map
 
 
 def build_bag_plans(
-    postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]
+    postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]],
 ) -> dict[Bag, BagPlan]:
     """Precompute separator and owned-edge positions for every bag."""
     plans: dict[Bag, BagPlan] = {}

@@ -18,7 +18,7 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
     source = JunctionGraph(
-        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])),
     )
     target = JunctionGraph(
         name="target",
@@ -37,7 +37,7 @@ def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
 def make_cost(*, rho: float = 2.0, edge_samples: int = 12, curve_samples: int = 33, corridor_radius: float | None = 0.5) -> SymmetricCorridorExceedance:
     source, target = make_graphs()
     cost = CostFactory(source, target).create(
-        CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples, corridor_radius=corridor_radius
+        CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples, corridor_radius=corridor_radius,
     )
 
     assert isinstance(cost, SymmetricCorridorExceedance)
@@ -265,7 +265,7 @@ def test_clear_cache_removes_local_cost_state() -> None:
 
 
 def directed_mean_corridor_exceedance_reference(
-    sample_points: np.ndarray, segment_starts: np.ndarray, segment_vectors: np.ndarray, segment_squared_lengths: np.ndarray, corridor_radius: float
+    sample_points: np.ndarray, segment_starts: np.ndarray, segment_vectors: np.ndarray, segment_squared_lengths: np.ndarray, corridor_radius: float,
 ) -> float:
     total = 0.0
 

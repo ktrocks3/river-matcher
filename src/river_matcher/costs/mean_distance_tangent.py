@@ -47,7 +47,7 @@ def _sampled_unit_tangents(points: XYArray) -> XYArray | None:
 
 @njit(cache=True, fastmath=False)
 def _directed_mean_distance_tangent(
-    sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray, tangent_weight: float
+    sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray, tangent_weight: float,
 ) -> float:
     """
     Compare sampled points and tangents against a target polyline.

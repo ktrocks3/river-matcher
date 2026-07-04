@@ -58,7 +58,7 @@ def test_candidate_distance_uses_polyline_segments() -> None:
 def test_candidates_are_ordered_by_edge_distance() -> None:
     source = make_graph("source", {1: (5.0, 0.5)})
     target = make_graph(
-        "target", {10: (0.0, 0.0), 11: (10.0, 0.0), 12: (10.0, 2.0)}, (make_edge(0, 10, 11, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 11, 12, [(0.0, 2.0), (10.0, 2.0)]))
+        "target", {10: (0.0, 0.0), 11: (10.0, 0.0), 12: (10.0, 2.0)}, (make_edge(0, 10, 11, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 11, 12, [(0.0, 2.0), (10.0, 2.0)])),
     )
 
     candidates = compute_candidate_sets(source, target, rho=2.0, top_k=10)
@@ -69,7 +69,7 @@ def test_candidates_are_ordered_by_edge_distance() -> None:
 def test_duplicate_vertices_keep_their_first_distance_order() -> None:
     source = make_graph("source", {1: (5.0, 0.0)})
     target = make_graph(
-        "target", {10: (0.0, 2.0), 20: (0.0, 1.0), 30: (10.0, 1.0)}, (make_edge(0, 10, 20, [(0.0, 2.0), (10.0, 2.0)]), make_edge(1, 20, 30, [(0.0, 1.0), (10.0, 1.0)]))
+        "target", {10: (0.0, 2.0), 20: (0.0, 1.0), 30: (10.0, 1.0)}, (make_edge(0, 10, 20, [(0.0, 2.0), (10.0, 2.0)]), make_edge(1, 20, 30, [(0.0, 1.0), (10.0, 1.0)])),
     )
 
     candidates = compute_candidate_sets(source, target, rho=3.0, top_k=10)
@@ -220,7 +220,7 @@ def test_numba_and_reference_implementations_match_exactly() -> None:
 def test_numba_and_reference_match_for_zero_radius() -> None:
     source = make_graph("source", {1: (0.0, 0.0), 2: (1.0, 0.0), 3: (2.0, 1.0)})
     target = make_graph(
-        "target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (2.0, 2.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 20, 30, [(2.0, 0.0), (2.0, 2.0)]))
+        "target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (2.0, 2.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 20, 30, [(2.0, 0.0), (2.0, 2.0)])),
     )
 
     accelerated = compute_candidate_sets(source, target, rho=0.0, top_k=10)

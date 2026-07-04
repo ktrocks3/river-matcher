@@ -1,0 +1,1818 @@
+{
+  "created_utc": "2026-07-04T19:34:46.899575+00:00",
+  "git_commit": "bc878afe7e19e6808353dfd8c246c0bd16e906fd",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "python": "3.12.1 (tags/v3.12.1:2305ca5, Dec  7 2023, 22:03:25) [MSC v.1937 64 bit (AMD64)]",
+  "reproducible": true,
+  "runs": [
+    {
+      "candidate_parameters": {
+        "rho": 10.0,
+        "top_k": 25
+      },
+      "candidates": {
+        "digest": "e33da21a4ec1b47d2e2716050c4c425e0f430457d8e94763f7e93033dedd5155",
+        "empty_domains": 0,
+        "maximum_candidates": 14,
+        "median_candidates": 6.0,
+        "minimum_candidates": 2,
+        "total_candidates": 454,
+        "vertices": 70
+      },
+      "cost": {
+        "name": "relative_length_error",
+        "options": {}
+      },
+      "decomposition": {
+        "bag_count": 66,
+        "digest": "6e8ed1a149e966380e8d9ad12b00f7d7ab8ee36f3f74f00d4ea2adc23d6f9881",
+        "estimated_state_upper_bound": 218899,
+        "heuristic": "minimum_fill_in",
+        "largest_candidate_products": [
+          {
+            "bag": [
+              816,
+              823,
+              1032,
+              1290,
+              1465
+            ],
+            "candidate_product": 37440,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              816,
+              823,
+              964,
+              1032,
+              1290
+            ],
+            "candidate_product": 28080,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              823,
+              1032,
+              1290,
+              1465,
+              1481
+            ],
+            "candidate_product": 23400,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              1032,
+              1290,
+              1353,
+              1465,
+              1481
+            ],
+            "candidate_product": 15600,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              661,
+              816,
+              823,
+              857,
+              964
+            ],
+            "candidate_product": 10368,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              388,
+              661,
+              816,
+              857,
+              964
+            ],
+            "candidate_product": 9216,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2745,
+              2757
+            ],
+            "candidate_product": 8316,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2740,
+              2745
+            ],
+            "candidate_product": 7560,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              816,
+              964,
+              1132,
+              1290
+            ],
+            "candidate_product": 6864,
+            "children": 1,
+            "owned_edges": 2
+          },
+          {
+            "bag": [
+              1032,
+              1353,
+              1385,
+              1465,
+              1481
+            ],
+            "candidate_product": 6000,
+            "children": 3,
+            "owned_edges": 1
+          }
+        ],
+        "maximum_bag_size": 5,
+        "minimum_degree_width": 4,
+        "minimum_fill_width": 4,
+        "width": 4
+      },
+      "dynamic_programming": {
+        "bags": [
+          {
+            "bag": [
+              1032,
+              1247,
+              1385,
+              1481
+            ],
+            "enumerated_states": 750,
+            "feasible_states": 655,
+            "message_entries": 125
+          },
+          {
+            "bag": [
+              813,
+              823,
+              964,
+              1032
+            ],
+            "enumerated_states": 2160,
+            "feasible_states": 1736,
+            "message_entries": 270
+          },
+          {
+            "bag": [
+              571,
+              3867
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 12,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              312,
+              571,
+              816
+            ],
+            "enumerated_states": 384,
+            "feasible_states": 384,
+            "message_entries": 64
+          },
+          {
+            "bag": [
+              113,
+              3918
+            ],
+            "enumerated_states": 14,
+            "feasible_states": 12,
+            "message_entries": 7
+          },
+          {
+            "bag": [
+              113,
+              184,
+              265
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 296,
+            "message_entries": 48
+          },
+          {
+            "bag": [
+              265,
+              4097
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 10,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              184,
+              265,
+              862
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 336,
+            "message_entries": 56
+          },
+          {
+            "bag": [
+              184,
+              312,
+              862
+            ],
+            "enumerated_states": 448,
+            "feasible_states": 448,
+            "message_entries": 56
+          },
+          {
+            "bag": [
+              312,
+              857,
+              862
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 304,
+            "message_entries": 48
+          },
+          {
+            "bag": [
+              312,
+              388,
+              816,
+              857
+            ],
+            "enumerated_states": 3072,
+            "feasible_states": 2880,
+            "message_entries": 384
+          },
+          {
+            "bag": [
+              388,
+              448,
+              661,
+              857
+            ],
+            "enumerated_states": 1920,
+            "feasible_states": 1712,
+            "message_entries": 192
+          },
+          {
+            "bag": [
+              388,
+              661,
+              810,
+              964
+            ],
+            "enumerated_states": 768,
+            "feasible_states": 616,
+            "message_entries": 192
+          },
+          {
+            "bag": [
+              388,
+              661,
+              816,
+              857,
+              964
+            ],
+            "enumerated_states": 9216,
+            "feasible_states": 9216,
+            "message_entries": 1152
+          },
+          {
+            "bag": [
+              661,
+              823,
+              849,
+              857
+            ],
+            "enumerated_states": 1944,
+            "feasible_states": 1884,
+            "message_entries": 216
+          },
+          {
+            "bag": [
+              661,
+              816,
+              823,
+              857,
+              964
+            ],
+            "enumerated_states": 10368,
+            "feasible_states": 10368,
+            "message_entries": 2592
+          },
+          {
+            "bag": [
+              816,
+              823,
+              857,
+              964
+            ],
+            "enumerated_states": 2592,
+            "feasible_states": 2592,
+            "message_entries": 432
+          },
+          {
+            "bag": [
+              816,
+              964,
+              984,
+              1132
+            ],
+            "enumerated_states": 3168,
+            "feasible_states": 2560,
+            "message_entries": 528
+          },
+          {
+            "bag": [
+              816,
+              964,
+              1132,
+              1290
+            ],
+            "enumerated_states": 6864,
+            "feasible_states": 6720,
+            "message_entries": 624
+          },
+          {
+            "bag": [
+              816,
+              823,
+              964,
+              1032,
+              1290
+            ],
+            "enumerated_states": 28080,
+            "feasible_states": 28080,
+            "message_entries": 4680
+          },
+          {
+            "bag": [
+              1218,
+              1406,
+              1465
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 73,
+            "message_entries": 32
+          },
+          {
+            "bag": [
+              816,
+              1218,
+              1290,
+              1465
+            ],
+            "enumerated_states": 3328,
+            "feasible_states": 3096,
+            "message_entries": 832
+          },
+          {
+            "bag": [
+              816,
+              823,
+              1032,
+              1290,
+              1465
+            ],
+            "enumerated_states": 37440,
+            "feasible_states": 37440,
+            "message_entries": 4680
+          },
+          {
+            "bag": [
+              823,
+              1032,
+              1290,
+              1465,
+              1481
+            ],
+            "enumerated_states": 23400,
+            "feasible_states": 22360,
+            "message_entries": 2600
+          },
+          {
+            "bag": [
+              1032,
+              1290,
+              1353,
+              1465,
+              1481
+            ],
+            "enumerated_states": 15600,
+            "feasible_states": 14600,
+            "message_entries": 1200
+          },
+          {
+            "bag": [
+              1353,
+              1385,
+              1454,
+              1465
+            ],
+            "enumerated_states": 1920,
+            "feasible_states": 1596,
+            "message_entries": 240
+          },
+          {
+            "bag": [
+              1032,
+              1353,
+              1385,
+              1465,
+              1481
+            ],
+            "enumerated_states": 6000,
+            "feasible_states": 5600,
+            "message_entries": 200
+          },
+          {
+            "bag": [
+              1385,
+              1465,
+              1481,
+              1566
+            ],
+            "enumerated_states": 2600,
+            "feasible_states": 2490,
+            "message_entries": 65
+          },
+          {
+            "bag": [
+              1481,
+              1566,
+              1929
+            ],
+            "enumerated_states": 325,
+            "feasible_states": 325,
+            "message_entries": 25
+          },
+          {
+            "bag": [
+              1577,
+              1806,
+              1884
+            ],
+            "enumerated_states": 480,
+            "feasible_states": 462,
+            "message_entries": 60
+          },
+          {
+            "bag": [
+              1539,
+              1577,
+              1884
+            ],
+            "enumerated_states": 300,
+            "feasible_states": 280,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1539,
+              1884,
+              1909
+            ],
+            "enumerated_states": 500,
+            "feasible_states": 450,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1481,
+              1539,
+              1729,
+              1909
+            ],
+            "enumerated_states": 1000,
+            "feasible_states": 920,
+            "message_entries": 200
+          },
+          {
+            "bag": [
+              1481,
+              1729,
+              1909,
+              1929
+            ],
+            "enumerated_states": 1000,
+            "feasible_states": 900,
+            "message_entries": 250
+          },
+          {
+            "bag": [
+              1909,
+              1929,
+              2031,
+              2290
+            ],
+            "enumerated_states": 1800,
+            "feasible_states": 1800,
+            "message_entries": 450
+          },
+          {
+            "bag": [
+              1909,
+              2148,
+              2290,
+              2468
+            ],
+            "enumerated_states": 2880,
+            "feasible_states": 2720,
+            "message_entries": 720
+          },
+          {
+            "bag": [
+              1909,
+              2242,
+              2468,
+              2740
+            ],
+            "enumerated_states": 3360,
+            "feasible_states": 3300,
+            "message_entries": 480
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2468,
+              2740
+            ],
+            "enumerated_states": 4320,
+            "feasible_states": 4140,
+            "message_entries": 540
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2740,
+              2745
+            ],
+            "enumerated_states": 7560,
+            "feasible_states": 7290,
+            "message_entries": 1260
+          },
+          {
+            "bag": [
+              2290,
+              2326,
+              2383,
+              2510
+            ],
+            "enumerated_states": 1350,
+            "feasible_states": 1080,
+            "message_entries": 225
+          },
+          {
+            "bag": [
+              2290,
+              2383,
+              2505,
+              2510
+            ],
+            "enumerated_states": 1350,
+            "feasible_states": 1305,
+            "message_entries": 270
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2510,
+              2633
+            ],
+            "enumerated_states": 1080,
+            "feasible_states": 972,
+            "message_entries": 216
+          },
+          {
+            "bag": [
+              2505,
+              2577,
+              2633,
+              2757
+            ],
+            "enumerated_states": 1056,
+            "feasible_states": 900,
+            "message_entries": 264
+          },
+          {
+            "bag": [
+              2633,
+              2800,
+              2964,
+              3146
+            ],
+            "enumerated_states": 512,
+            "feasible_states": 404,
+            "message_entries": 128
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              2964,
+              3146
+            ],
+            "enumerated_states": 768,
+            "feasible_states": 688,
+            "message_entries": 96
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              3146,
+              3389
+            ],
+            "enumerated_states": 672,
+            "feasible_states": 672,
+            "message_entries": 168
+          },
+          {
+            "bag": [
+              2735,
+              3167,
+              3296,
+              3389
+            ],
+            "enumerated_states": 2100,
+            "feasible_states": 1842,
+            "message_entries": 420
+          },
+          {
+            "bag": [
+              3824,
+              9667
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 10,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              3653,
+              3824,
+              3832
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 92,
+            "message_entries": 16
+          },
+          {
+            "bag": [
+              3832,
+              9659
+            ],
+            "enumerated_states": 16,
+            "feasible_states": 12,
+            "message_entries": 4
+          },
+          {
+            "bag": [
+              3653,
+              3679,
+              3832
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 96,
+            "message_entries": 24
+          },
+          {
+            "bag": [
+              3530,
+              3653,
+              3679
+            ],
+            "enumerated_states": 216,
+            "feasible_states": 192,
+            "message_entries": 54
+          },
+          {
+            "bag": [
+              3530,
+              3544,
+              3679
+            ],
+            "enumerated_states": 432,
+            "feasible_states": 432,
+            "message_entries": 72
+          },
+          {
+            "bag": [
+              3349,
+              3530,
+              3544
+            ],
+            "enumerated_states": 360,
+            "feasible_states": 332,
+            "message_entries": 40
+          },
+          {
+            "bag": [
+              3349,
+              3464,
+              3544
+            ],
+            "enumerated_states": 320,
+            "feasible_states": 305,
+            "message_entries": 40
+          },
+          {
+            "bag": [
+              3167,
+              3349,
+              3464
+            ],
+            "enumerated_states": 400,
+            "feasible_states": 374,
+            "message_entries": 80
+          },
+          {
+            "bag": [
+              3167,
+              3389,
+              3464
+            ],
+            "enumerated_states": 560,
+            "feasible_states": 560,
+            "message_entries": 70
+          },
+          {
+            "bag": [
+              2735,
+              2757,
+              3167,
+              3389
+            ],
+            "enumerated_states": 4620,
+            "feasible_states": 4620,
+            "message_entries": 462
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              2757,
+              3389
+            ],
+            "enumerated_states": 1848,
+            "feasible_states": 1820,
+            "message_entries": 308
+          },
+          {
+            "bag": [
+              2633,
+              2757,
+              3389
+            ],
+            "enumerated_states": 308,
+            "feasible_states": 308,
+            "message_entries": 44
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2633,
+              2757
+            ],
+            "enumerated_states": 2376,
+            "feasible_states": 2376,
+            "message_entries": 594
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2745,
+              2757
+            ],
+            "enumerated_states": 8316,
+            "feasible_states": 8217,
+            "message_entries": 1386
+          },
+          {
+            "bag": [
+              2290,
+              2745,
+              2757
+            ],
+            "enumerated_states": 1386,
+            "feasible_states": 1287,
+            "message_entries": 126
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2745
+            ],
+            "enumerated_states": 1260,
+            "feasible_states": 1260,
+            "message_entries": 90
+          },
+          {
+            "bag": [
+              1909,
+              1929,
+              2290
+            ],
+            "enumerated_states": 450,
+            "feasible_states": 450,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1481,
+              1909,
+              1929
+            ],
+            "enumerated_states": 250,
+            "feasible_states": 250,
+            "message_entries": 1
+          }
+        ],
+        "enumerated_states": 218899,
+        "feasible_states": 211519,
+        "message_entries": 30866,
+        "unique_cost_requests": 4687
+      },
+      "objectives": {
+        "additive": {
+          "feasible": true,
+          "mapping_digest": "d881bc4b9ecd80314dcc83f6f92d7c48430546a05000f87b4b4990fa68bf3f84",
+          "mapping_size": 70,
+          "value": 3.586561682942074,
+          "value_hex": "0x1.cb147406a955cp+1",
+          "witness_count": 103,
+          "witness_digest": "5a5f015f01db92837669486d1ab8b027875d949f9a315e64388126ec463e3e49",
+          "witness_points": 9787
+        },
+        "bottleneck": {
+          "feasible": true,
+          "mapping_digest": "120177c3a1ba2407b85ec2030c27d937b8add1d07cbbd40e9057b29955264b71",
+          "mapping_size": 70,
+          "value": 0.4377682403433476,
+          "value_hex": "0x1.c046514e02328p-2",
+          "witness_count": 103,
+          "witness_digest": "9b9b63e781d999a28a6cb60caf0d42ef12f10142af68cfd37642533198fed57f",
+          "witness_points": 10141
+        }
+      },
+      "repeat": 1,
+      "source": {
+        "edges": 103,
+        "name": "1955e5",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e5.txt",
+        "vertices": 70
+      },
+      "target": {
+        "edges": 581,
+        "name": "1955e3",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e3.txt",
+        "vertices": 371
+      },
+      "timestamp_utc": "2026-07-04T19:34:44.278073+00:00",
+      "timings_seconds": {
+        "candidate_generation": 0.4111269998829812,
+        "cost_creation": 4.850002005696297e-05,
+        "cost_factory": 0.06829959992319345,
+        "dynamic_programming": 1.0453298999927938,
+        "load_source": 0.42608170001767576,
+        "load_target": 0.8416766999289393,
+        "materialize_additive": 0.0032486000563949347,
+        "materialize_bottleneck": 0.0020445999689400196,
+        "source_decomposition": 0.013227000134065747,
+        "total": 2.8111247001215816
+      }
+    },
+    {
+      "candidate_parameters": {
+        "rho": 10.0,
+        "top_k": 25
+      },
+      "candidates": {
+        "digest": "e33da21a4ec1b47d2e2716050c4c425e0f430457d8e94763f7e93033dedd5155",
+        "empty_domains": 0,
+        "maximum_candidates": 14,
+        "median_candidates": 6.0,
+        "minimum_candidates": 2,
+        "total_candidates": 454,
+        "vertices": 70
+      },
+      "cost": {
+        "name": "relative_length_error",
+        "options": {}
+      },
+      "decomposition": {
+        "bag_count": 66,
+        "digest": "6e8ed1a149e966380e8d9ad12b00f7d7ab8ee36f3f74f00d4ea2adc23d6f9881",
+        "estimated_state_upper_bound": 218899,
+        "heuristic": "minimum_fill_in",
+        "largest_candidate_products": [
+          {
+            "bag": [
+              816,
+              823,
+              1032,
+              1290,
+              1465
+            ],
+            "candidate_product": 37440,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              816,
+              823,
+              964,
+              1032,
+              1290
+            ],
+            "candidate_product": 28080,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              823,
+              1032,
+              1290,
+              1465,
+              1481
+            ],
+            "candidate_product": 23400,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              1032,
+              1290,
+              1353,
+              1465,
+              1481
+            ],
+            "candidate_product": 15600,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              661,
+              816,
+              823,
+              857,
+              964
+            ],
+            "candidate_product": 10368,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              388,
+              661,
+              816,
+              857,
+              964
+            ],
+            "candidate_product": 9216,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2745,
+              2757
+            ],
+            "candidate_product": 8316,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2740,
+              2745
+            ],
+            "candidate_product": 7560,
+            "children": 1,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              816,
+              964,
+              1132,
+              1290
+            ],
+            "candidate_product": 6864,
+            "children": 1,
+            "owned_edges": 2
+          },
+          {
+            "bag": [
+              1032,
+              1353,
+              1385,
+              1465,
+              1481
+            ],
+            "candidate_product": 6000,
+            "children": 3,
+            "owned_edges": 1
+          }
+        ],
+        "maximum_bag_size": 5,
+        "minimum_degree_width": 4,
+        "minimum_fill_width": 4,
+        "width": 4
+      },
+      "dynamic_programming": {
+        "bags": [
+          {
+            "bag": [
+              1032,
+              1247,
+              1385,
+              1481
+            ],
+            "enumerated_states": 750,
+            "feasible_states": 655,
+            "message_entries": 125
+          },
+          {
+            "bag": [
+              813,
+              823,
+              964,
+              1032
+            ],
+            "enumerated_states": 2160,
+            "feasible_states": 1736,
+            "message_entries": 270
+          },
+          {
+            "bag": [
+              571,
+              3867
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 12,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              312,
+              571,
+              816
+            ],
+            "enumerated_states": 384,
+            "feasible_states": 384,
+            "message_entries": 64
+          },
+          {
+            "bag": [
+              113,
+              3918
+            ],
+            "enumerated_states": 14,
+            "feasible_states": 12,
+            "message_entries": 7
+          },
+          {
+            "bag": [
+              113,
+              184,
+              265
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 296,
+            "message_entries": 48
+          },
+          {
+            "bag": [
+              265,
+              4097
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 10,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              184,
+              265,
+              862
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 336,
+            "message_entries": 56
+          },
+          {
+            "bag": [
+              184,
+              312,
+              862
+            ],
+            "enumerated_states": 448,
+            "feasible_states": 448,
+            "message_entries": 56
+          },
+          {
+            "bag": [
+              312,
+              857,
+              862
+            ],
+            "enumerated_states": 336,
+            "feasible_states": 304,
+            "message_entries": 48
+          },
+          {
+            "bag": [
+              312,
+              388,
+              816,
+              857
+            ],
+            "enumerated_states": 3072,
+            "feasible_states": 2880,
+            "message_entries": 384
+          },
+          {
+            "bag": [
+              388,
+              448,
+              661,
+              857
+            ],
+            "enumerated_states": 1920,
+            "feasible_states": 1712,
+            "message_entries": 192
+          },
+          {
+            "bag": [
+              388,
+              661,
+              810,
+              964
+            ],
+            "enumerated_states": 768,
+            "feasible_states": 616,
+            "message_entries": 192
+          },
+          {
+            "bag": [
+              388,
+              661,
+              816,
+              857,
+              964
+            ],
+            "enumerated_states": 9216,
+            "feasible_states": 9216,
+            "message_entries": 1152
+          },
+          {
+            "bag": [
+              661,
+              823,
+              849,
+              857
+            ],
+            "enumerated_states": 1944,
+            "feasible_states": 1884,
+            "message_entries": 216
+          },
+          {
+            "bag": [
+              661,
+              816,
+              823,
+              857,
+              964
+            ],
+            "enumerated_states": 10368,
+            "feasible_states": 10368,
+            "message_entries": 2592
+          },
+          {
+            "bag": [
+              816,
+              823,
+              857,
+              964
+            ],
+            "enumerated_states": 2592,
+            "feasible_states": 2592,
+            "message_entries": 432
+          },
+          {
+            "bag": [
+              816,
+              964,
+              984,
+              1132
+            ],
+            "enumerated_states": 3168,
+            "feasible_states": 2560,
+            "message_entries": 528
+          },
+          {
+            "bag": [
+              816,
+              964,
+              1132,
+              1290
+            ],
+            "enumerated_states": 6864,
+            "feasible_states": 6720,
+            "message_entries": 624
+          },
+          {
+            "bag": [
+              816,
+              823,
+              964,
+              1032,
+              1290
+            ],
+            "enumerated_states": 28080,
+            "feasible_states": 28080,
+            "message_entries": 4680
+          },
+          {
+            "bag": [
+              1218,
+              1406,
+              1465
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 73,
+            "message_entries": 32
+          },
+          {
+            "bag": [
+              816,
+              1218,
+              1290,
+              1465
+            ],
+            "enumerated_states": 3328,
+            "feasible_states": 3096,
+            "message_entries": 832
+          },
+          {
+            "bag": [
+              816,
+              823,
+              1032,
+              1290,
+              1465
+            ],
+            "enumerated_states": 37440,
+            "feasible_states": 37440,
+            "message_entries": 4680
+          },
+          {
+            "bag": [
+              823,
+              1032,
+              1290,
+              1465,
+              1481
+            ],
+            "enumerated_states": 23400,
+            "feasible_states": 22360,
+            "message_entries": 2600
+          },
+          {
+            "bag": [
+              1032,
+              1290,
+              1353,
+              1465,
+              1481
+            ],
+            "enumerated_states": 15600,
+            "feasible_states": 14600,
+            "message_entries": 1200
+          },
+          {
+            "bag": [
+              1353,
+              1385,
+              1454,
+              1465
+            ],
+            "enumerated_states": 1920,
+            "feasible_states": 1596,
+            "message_entries": 240
+          },
+          {
+            "bag": [
+              1032,
+              1353,
+              1385,
+              1465,
+              1481
+            ],
+            "enumerated_states": 6000,
+            "feasible_states": 5600,
+            "message_entries": 200
+          },
+          {
+            "bag": [
+              1385,
+              1465,
+              1481,
+              1566
+            ],
+            "enumerated_states": 2600,
+            "feasible_states": 2490,
+            "message_entries": 65
+          },
+          {
+            "bag": [
+              1481,
+              1566,
+              1929
+            ],
+            "enumerated_states": 325,
+            "feasible_states": 325,
+            "message_entries": 25
+          },
+          {
+            "bag": [
+              1577,
+              1806,
+              1884
+            ],
+            "enumerated_states": 480,
+            "feasible_states": 462,
+            "message_entries": 60
+          },
+          {
+            "bag": [
+              1539,
+              1577,
+              1884
+            ],
+            "enumerated_states": 300,
+            "feasible_states": 280,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1539,
+              1884,
+              1909
+            ],
+            "enumerated_states": 500,
+            "feasible_states": 450,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1481,
+              1539,
+              1729,
+              1909
+            ],
+            "enumerated_states": 1000,
+            "feasible_states": 920,
+            "message_entries": 200
+          },
+          {
+            "bag": [
+              1481,
+              1729,
+              1909,
+              1929
+            ],
+            "enumerated_states": 1000,
+            "feasible_states": 900,
+            "message_entries": 250
+          },
+          {
+            "bag": [
+              1909,
+              1929,
+              2031,
+              2290
+            ],
+            "enumerated_states": 1800,
+            "feasible_states": 1800,
+            "message_entries": 450
+          },
+          {
+            "bag": [
+              1909,
+              2148,
+              2290,
+              2468
+            ],
+            "enumerated_states": 2880,
+            "feasible_states": 2720,
+            "message_entries": 720
+          },
+          {
+            "bag": [
+              1909,
+              2242,
+              2468,
+              2740
+            ],
+            "enumerated_states": 3360,
+            "feasible_states": 3300,
+            "message_entries": 480
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2468,
+              2740
+            ],
+            "enumerated_states": 4320,
+            "feasible_states": 4140,
+            "message_entries": 540
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2740,
+              2745
+            ],
+            "enumerated_states": 7560,
+            "feasible_states": 7290,
+            "message_entries": 1260
+          },
+          {
+            "bag": [
+              2290,
+              2326,
+              2383,
+              2510
+            ],
+            "enumerated_states": 1350,
+            "feasible_states": 1080,
+            "message_entries": 225
+          },
+          {
+            "bag": [
+              2290,
+              2383,
+              2505,
+              2510
+            ],
+            "enumerated_states": 1350,
+            "feasible_states": 1305,
+            "message_entries": 270
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2510,
+              2633
+            ],
+            "enumerated_states": 1080,
+            "feasible_states": 972,
+            "message_entries": 216
+          },
+          {
+            "bag": [
+              2505,
+              2577,
+              2633,
+              2757
+            ],
+            "enumerated_states": 1056,
+            "feasible_states": 900,
+            "message_entries": 264
+          },
+          {
+            "bag": [
+              2633,
+              2800,
+              2964,
+              3146
+            ],
+            "enumerated_states": 512,
+            "feasible_states": 404,
+            "message_entries": 128
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              2964,
+              3146
+            ],
+            "enumerated_states": 768,
+            "feasible_states": 688,
+            "message_entries": 96
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              3146,
+              3389
+            ],
+            "enumerated_states": 672,
+            "feasible_states": 672,
+            "message_entries": 168
+          },
+          {
+            "bag": [
+              2735,
+              3167,
+              3296,
+              3389
+            ],
+            "enumerated_states": 2100,
+            "feasible_states": 1842,
+            "message_entries": 420
+          },
+          {
+            "bag": [
+              3824,
+              9667
+            ],
+            "enumerated_states": 12,
+            "feasible_states": 10,
+            "message_entries": 6
+          },
+          {
+            "bag": [
+              3653,
+              3824,
+              3832
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 92,
+            "message_entries": 16
+          },
+          {
+            "bag": [
+              3832,
+              9659
+            ],
+            "enumerated_states": 16,
+            "feasible_states": 12,
+            "message_entries": 4
+          },
+          {
+            "bag": [
+              3653,
+              3679,
+              3832
+            ],
+            "enumerated_states": 96,
+            "feasible_states": 96,
+            "message_entries": 24
+          },
+          {
+            "bag": [
+              3530,
+              3653,
+              3679
+            ],
+            "enumerated_states": 216,
+            "feasible_states": 192,
+            "message_entries": 54
+          },
+          {
+            "bag": [
+              3530,
+              3544,
+              3679
+            ],
+            "enumerated_states": 432,
+            "feasible_states": 432,
+            "message_entries": 72
+          },
+          {
+            "bag": [
+              3349,
+              3530,
+              3544
+            ],
+            "enumerated_states": 360,
+            "feasible_states": 332,
+            "message_entries": 40
+          },
+          {
+            "bag": [
+              3349,
+              3464,
+              3544
+            ],
+            "enumerated_states": 320,
+            "feasible_states": 305,
+            "message_entries": 40
+          },
+          {
+            "bag": [
+              3167,
+              3349,
+              3464
+            ],
+            "enumerated_states": 400,
+            "feasible_states": 374,
+            "message_entries": 80
+          },
+          {
+            "bag": [
+              3167,
+              3389,
+              3464
+            ],
+            "enumerated_states": 560,
+            "feasible_states": 560,
+            "message_entries": 70
+          },
+          {
+            "bag": [
+              2735,
+              2757,
+              3167,
+              3389
+            ],
+            "enumerated_states": 4620,
+            "feasible_states": 4620,
+            "message_entries": 462
+          },
+          {
+            "bag": [
+              2633,
+              2735,
+              2757,
+              3389
+            ],
+            "enumerated_states": 1848,
+            "feasible_states": 1820,
+            "message_entries": 308
+          },
+          {
+            "bag": [
+              2633,
+              2757,
+              3389
+            ],
+            "enumerated_states": 308,
+            "feasible_states": 308,
+            "message_entries": 44
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2633,
+              2757
+            ],
+            "enumerated_states": 2376,
+            "feasible_states": 2376,
+            "message_entries": 594
+          },
+          {
+            "bag": [
+              2290,
+              2505,
+              2745,
+              2757
+            ],
+            "enumerated_states": 8316,
+            "feasible_states": 8217,
+            "message_entries": 1386
+          },
+          {
+            "bag": [
+              2290,
+              2745,
+              2757
+            ],
+            "enumerated_states": 1386,
+            "feasible_states": 1287,
+            "message_entries": 126
+          },
+          {
+            "bag": [
+              1909,
+              2290,
+              2745
+            ],
+            "enumerated_states": 1260,
+            "feasible_states": 1260,
+            "message_entries": 90
+          },
+          {
+            "bag": [
+              1909,
+              1929,
+              2290
+            ],
+            "enumerated_states": 450,
+            "feasible_states": 450,
+            "message_entries": 50
+          },
+          {
+            "bag": [
+              1481,
+              1909,
+              1929
+            ],
+            "enumerated_states": 250,
+            "feasible_states": 250,
+            "message_entries": 1
+          }
+        ],
+        "enumerated_states": 218899,
+        "feasible_states": 211519,
+        "message_entries": 30866,
+        "unique_cost_requests": 4687
+      },
+      "objectives": {
+        "additive": {
+          "feasible": true,
+          "mapping_digest": "d881bc4b9ecd80314dcc83f6f92d7c48430546a05000f87b4b4990fa68bf3f84",
+          "mapping_size": 70,
+          "value": 3.586561682942074,
+          "value_hex": "0x1.cb147406a955cp+1",
+          "witness_count": 103,
+          "witness_digest": "5a5f015f01db92837669486d1ab8b027875d949f9a315e64388126ec463e3e49",
+          "witness_points": 9787
+        },
+        "bottleneck": {
+          "feasible": true,
+          "mapping_digest": "120177c3a1ba2407b85ec2030c27d937b8add1d07cbbd40e9057b29955264b71",
+          "mapping_size": 70,
+          "value": 0.4377682403433476,
+          "value_hex": "0x1.c046514e02328p-2",
+          "witness_count": 103,
+          "witness_digest": "9b9b63e781d999a28a6cb60caf0d42ef12f10142af68cfd37642533198fed57f",
+          "witness_points": 10141
+        }
+      },
+      "repeat": 2,
+      "source": {
+        "edges": 103,
+        "name": "1955e5",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e5.txt",
+        "vertices": 70
+      },
+      "target": {
+        "edges": 581,
+        "name": "1955e3",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e3.txt",
+        "vertices": 371
+      },
+      "timestamp_utc": "2026-07-04T19:34:46.891567+00:00",
+      "timings_seconds": {
+        "candidate_generation": 0.027984000043943524,
+        "cost_creation": 6.54999166727066e-05,
+        "cost_factory": 0.06616170005872846,
+        "dynamic_programming": 1.0969203000422567,
+        "load_source": 0.49173830007202923,
+        "load_target": 0.9036923998501152,
+        "materialize_additive": 0.0020783001091331244,
+        "materialize_bottleneck": 0.001119700027629733,
+        "source_decomposition": 0.010983400046825409,
+        "total": 2.6007878999225795
+      }
+    }
+  ],
+  "schema_version": 1
+}
