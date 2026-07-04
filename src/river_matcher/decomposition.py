@@ -30,4 +30,4 @@ class BagPlan:
 
 @dataclass(frozen=True, slots=True)
 class SourceDecomposition:
-    
+    """Rooted tree decomposition and source-edge ownership information."""
