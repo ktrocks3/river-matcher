@@ -64,7 +64,7 @@ def test_factory_reports_named_but_unimplemented_cost() -> None:
     factory = CostFactory(source, target)
 
     with pytest.raises(NotImplementedError, match="not implemented yet"):
-        factory.create(CostName.DYNAMIC_TIME_WARPING)
+        factory.create(CostName.DYNAMIC_TIME_WARPING_DISTANCE)
 
 
 def test_standalone_factory_function_constructs_cost() -> None:

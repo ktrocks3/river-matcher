@@ -20,6 +20,7 @@ dependencies = [
     "pyqtgraph",
     "pillow>=12.2.0",
     "curvesimilarities>=0.3.0",
+    "dtaidistance>=2.4.0",
 ]
 
 
@@ -98,6 +99,9 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["dtaidistance"]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
