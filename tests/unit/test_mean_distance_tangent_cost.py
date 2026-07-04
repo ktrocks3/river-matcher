@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from river_matcher.costs import CostFactory, CostName, MeanDistanceTangent
-from river_matcher.costs.mean_distance_tangent import (_directed_mean_distance_tangent)
+from river_matcher.costs.mean_distance_tangent import _directed_mean_distance_tangent
 from river_matcher.models import JunctionEdge, JunctionGraph
 
 type CostRequest = tuple[int, int, int, int, int]

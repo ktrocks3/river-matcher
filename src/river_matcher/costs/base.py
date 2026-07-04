@@ -26,7 +26,7 @@ class CostName(StrEnum):
     HAUSDORFF_DISTANCE = "hausdorff_distance"
     SYMMETRIC_CORRIDOR_EXCEEDANCE = "symmetric_corridor_exceedance"
     DYNAMIC_TIME_WARPING = "dynamic_time_warping"
-    DISCRETE_FRECHET = "discrete_frechet"
+    DISCRETE_FRECHET_DISTANCE = "discrete_frechet_distance"
 
 
 @dataclass(slots=True)

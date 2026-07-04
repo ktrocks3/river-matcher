@@ -962,6 +962,7 @@ name = "river-graph-matcher"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "curvesimilarities" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "numba" },
@@ -999,6 +1000,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'" },
+    { name = "curvesimilarities", specifier = ">=0.3.0" },
     { name = "curvesimilarities", marker = "extra == 'frechet'" },
     { name = "line-profiler", marker = "extra == 'dev'" },
     { name = "matplotlib" },

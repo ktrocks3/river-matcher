@@ -19,6 +19,7 @@ dependencies = [
     "PySide6",
     "pyqtgraph",
     "pillow>=12.2.0",
+    "curvesimilarities>=0.3.0",
 ]
 
 

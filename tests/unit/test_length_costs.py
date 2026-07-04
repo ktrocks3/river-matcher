@@ -47,7 +47,8 @@ def test_factory_costs_share_graph_resources() -> None:
 
 
 def test_available_costs_only_lists_implemented_costs() -> None:
-    assert available_costs() == (CostName.RELATIVE_LENGTH_ERROR, CostName.LOG_LENGTH_DISTORTION, CostName.HAUSDORFF_DISTANCE, CostName.MEAN_DISTANCE_TANGENT)
+    assert available_costs() == (CostName.RELATIVE_LENGTH_ERROR, CostName.LOG_LENGTH_DISTORTION, CostName.MEAN_DISTANCE_TANGENT, CostName.HAUSDORFF_DISTANCE,
+                                 CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE, CostName.DISCRETE_FRECHET_DISTANCE,)
 
 
 def test_factory_rejects_unknown_cost_name() -> None:
@@ -63,7 +64,7 @@ def test_factory_reports_named_but_unimplemented_cost() -> None:
     factory = CostFactory(source, target)
 
     with pytest.raises(NotImplementedError, match="not implemented yet"):
-        factory.create(CostName.SYMMETRIC_CORRIDOR_ERROR)
+        factory.create(CostName.DYNAMIC_TIME_WARPING)
 
 
 def test_standalone_factory_function_constructs_cost() -> None:
