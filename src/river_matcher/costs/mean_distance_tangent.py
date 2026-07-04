@@ -46,44 +46,21 @@ def _sampled_unit_tangents(points: XYArray) -> XYArray | None:
 
 
 @njit(cache=True, fastmath=False)
-def _directed_mean_distance_tangent(
-    sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray, tangent_weight: float,
-) -> float:
-    """
-    Compare sampled points and tangents against a target polyline.
-
-    Distances use exact point-to-segment projections. At an interior target
-    vertex, the tangent uses the bisector of the adjacent segment directions.
-    """
-    sample_count = sample_points.shape[0]
-    segment_count = segment_starts.shape[0]
-
+def _directed_mean_distance_tangent(sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray,
+                                    tangent_weight: float, ) -> float:
+    sample_count, segment_count = sample_points.shape[0], segment_starts.shape[0]
     if sample_count == 0 or segment_count == 0:
         return math.inf
-
-    _count = sample_points.shape[0]
-    segment_count = segment_starts.shape[0]
-
-    if sample_count == 0 or segment_count == 0:
-        return math.inf
-
     total = 0.0
 
     for sample_index in range(sample_count):
-        px = sample_points[sample_index, 0]
-        py = sample_points[sample_index, 1]
-        sample_tx = sample_tangents[sample_index, 0]
-        sample_ty = sample_tangents[sample_index, 1]
+        px, py = sample_points[sample_index, 0], sample_points[sample_index, 1]
+        sample_tx, sample_ty = sample_tangents[sample_index, 0], sample_tangents[sample_index, 1]
 
-        best_squared_distance = math.inf
-        best_segment = -1
-        best_projection = 0.0
-
+        best_squared_distance, best_segment, best_projection = math.inf, -1, 0.0
         for segment_index in range(segment_count):
-            sx = segment_starts[segment_index, 0]
-            sy = segment_starts[segment_index, 1]
-            vx = segment_vectors[segment_index, 0]
-            vy = segment_vectors[segment_index, 1]
+            sx, sy = segment_starts[segment_index, 0], segment_starts[segment_index, 1]
+            vx, vy = segment_vectors[segment_index, 0], segment_vectors[segment_index, 1]
             squared_length = segment_squared_lengths[segment_index]
             projection = ((px - sx) * vx + (py - sy) * vy) / squared_length
 
@@ -95,9 +72,7 @@ def _directed_mean_distance_tangent(
             dy = sy + projection * vy - py
             squared_distance = dx * dx + dy * dy
             if squared_distance < best_squared_distance:
-                best_squared_distance = squared_distance
-                best_segment = segment_index
-                best_projection = projection
+                best_squared_distance, best_segment, best_projection = squared_distance, segment_index, projection
         if best_segment < 0:
             return math.inf
 
@@ -123,11 +98,8 @@ def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_leng
     of the incoming and outgoing segment directions.
     """
     current_length = math.sqrt(segment_squared_lengths[segment_index])
-    current_x = segment_vectors[segment_index, 0] / current_length
-    current_y = segment_vectors[segment_index, 1] / current_length
-
-    tangent_x = current_x
-    tangent_y = current_y
+    current_x, current_y = segment_vectors[segment_index, 0] / current_length, segment_vectors[segment_index, 1] / current_length
+    tangent_x, tangent_y = current_x, current_y
 
     if projection <= _VERTEX_PROJECTION_TOLERANCE and segment_index > 0:
         adjacent_index = segment_index - 1
@@ -150,13 +122,6 @@ def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_leng
 
 
 class MeanDistanceTangent(BaseEdgeCost):
-    """
-    Symmetric sampled mean distance with local tangent disagreement.
-
-    ``tangent_weight`` converts the dimensionless normalized angular error
-    into the same units as the graph coordinates.
-    """
-
     name = CostName.MEAN_DISTANCE_TANGENT
     label = "symmetric mean distance and tangent error"
 
