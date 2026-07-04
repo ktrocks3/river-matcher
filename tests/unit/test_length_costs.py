@@ -17,9 +17,9 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
     source = JunctionGraph(name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)},
-        edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
+                           edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
     target = JunctionGraph(name="target", coordinates={10: (0.0, 0.0), 20: (3.0, 0.0), 30: (10.0, 0.0), 40: (11.0, 0.0)},
-        edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.5, 0.0), (3.0, 0.0)]), make_edge(11, 30, 40, [(10.0, 0.0), (11.0, 0.0)]),))
+                           edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.5, 0.0), (3.0, 0.0)]), make_edge(11, 30, 40, [(10.0, 0.0), (11.0, 0.0)]),))
 
     return source, target
 
@@ -47,7 +47,7 @@ def test_factory_costs_share_graph_resources() -> None:
 
 
 def test_available_costs_only_lists_implemented_costs() -> None:
-    assert available_costs() == (CostName.RELATIVE_LENGTH_ERROR, CostName.LOG_LENGTH_DISTORTION, CostName.HAUSDORFF_DISTANCE)
+    assert available_costs() == (CostName.RELATIVE_LENGTH_ERROR, CostName.LOG_LENGTH_DISTORTION, CostName.HAUSDORFF_DISTANCE, CostName.MEAN_DISTANCE_TANGENT)
 
 
 def test_factory_rejects_unknown_cost_name() -> None:
