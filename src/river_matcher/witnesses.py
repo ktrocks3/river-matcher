@@ -296,8 +296,10 @@ class SourceGuidedWitnessFinder:
                 adjacency[record.v].append((record.u, weight, record.reverse))
         result = dict(adjacency)
         self._adjacency_cache[edge_id] = result
+
         self.timing.adjacency_seconds += time.perf_counter() - started
-        self.timing.adjacency_seconds += 1
+        self.timing.adjacency_builds += 1
+
         return result
 
     def _tree(self, edge_id: int, start: int) -> ShortestPathTree:

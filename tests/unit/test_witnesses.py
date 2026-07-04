@@ -7,7 +7,10 @@ import numpy as np
 import pytest
 
 from river_matcher.models import JunctionEdge, JunctionGraph
-from river_matcher.witnesses import (ShortestPathWitnessFinder, SourceGuidedWitnessFinder, )
+from river_matcher.witnesses import (
+    ShortestPathWitnessFinder,
+    SourceGuidedWitnessFinder,
+)
 
 
 def make_edge(edge_id: int, u: int, v: int, polyline: list[tuple[float, float]], ) -> JunctionEdge:
