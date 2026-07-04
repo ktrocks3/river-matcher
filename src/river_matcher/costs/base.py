@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import ClassVar, Iterable
+from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
