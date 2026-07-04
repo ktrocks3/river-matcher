@@ -94,4 +94,59 @@ def _dijkstra(adjacency: Mapping[int, list[Arc]], start: int) -> ShortestPathTre
 
         for neighbour, weight, segment in adjacency.get(current, []):
             new_distance = distance + weight
-            if 
+            if new_distance < distances.get(neighbour, math.inf):
+                distances[neighbour] = new_distance
+                parent[neighbour] = current
+                parent_segment[neighbour] = segment
+                heapq.heappush(queue, (new_distance, neighbour))
+    return distances, parent, parent_segment
+
+
+def _reconstruct_path(end: int, parent: ParentMap, parent_segment: ParentSegmentMap) -> XYArray | None:
+    """Concatenate the oriented edge polylines in one shortest-path tree."""
+    if end not in parent:
+        return None
+    nodes: list[int] = []
+    current: int | None = end
+    while current is not None:
+        nodes.append(current)
+        current = parent[current]
+    nodes.reverse()
+    segments = [parent_segment[node] for node in nodes[1:]]
+    if not segments:
+        return None
+    pieces: list[XYArray] = [segments[0]]
+    pieces.extend(segment[1:] for segment in segments[1:])
+    return _readonly_xy(np.vstack(pieces))
+
+
+class ShortestPathWitnessFinder:
+    """ Resolve ordinary geometric-length shortest paths in a target multigraph.
+        Parallel edges remain separate adjacency entries and retain their own geometry during path reconstruction."""
+
+    def __init__(self, target: JunctionGraph) -> None:
+        self.target = target
+        self._target_vertices = set(target.vertices)
+        self._records = _prepare_target_edges(target)
+        self._adjacency = self._build_adjacency()
+        self._tree_cache: dict[int, ShortestPathTree] = {}
+        self._path_cache: TargetPairPaths = {}
+
+    def _build_adjacency(self) -> Adjacency:
+        adjacency: defaultdict[int, list[Arc]] = defaultdict(list)
+        for record in self._records:
+            adjacency[record.u].append((record.v, record.length, record.forward))
+            adjacency[record.v].append((record.u, record.length, record.reverse))
+        return dict(adjacency)
+
+    def _tree(self, start: int) -> ShortestPathTree:
+        if start in self._tree_cache:
+            return self._tree_cache[start]
+        if start not in self._target_vertices:
+            tree: ShortestPathTree = ({}, {}, {})
+        else:
+            tree = _dijkstra(self._adjacency, start)
+        self._tree_cache[start] = tree
+        return tree
+
+    def distance(self, start:int, end: int) -> float:
