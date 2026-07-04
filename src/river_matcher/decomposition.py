@@ -168,7 +168,7 @@ def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Map
 
 
 def build_bag_plans(postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]) -> \
-dict[Bag, BagPlan]:
+        dict[Bag, BagPlan]:
     """Precompute separator and owned-edge positions for every bag."""
     plans: dict[Bag, BagPlan] = {}
     for bag in postorder:
@@ -207,4 +207,103 @@ def validate_decomposition_tree(source: JunctionGraph, width: int, tree: nx.Grap
 
     if covered_vertices != source_vertices:
         missing = sorted(source_vertices - covered_vertices)
-        raise ValueError(f"The decomposition graph has {len(missing)}-bags.")
+        raise ValueError(f"Tree decomposition does not cover source vertices {missing}.")
+    for edge in source.edges:
+        if not bags_by_vertex[edge.u] & bags_by_vertex[edge.v]:
+            raise ValueError(f"No tree-decomposition bag covers source edge e{edge.id}: ({edge.u}, {edge.v}).")
+    for vertex in sorted(source_vertices):
+        containing_bags = bags_by_vertex[vertex]
+        if not nx.is_connected(tree.subgraph(containing_bags)):
+            raise ValueError(f"Bags containing source vertex {vertex} do not form a connected subtree.")
+    actual_width = max(len(bag) for bag in bags) - 1
+    if actual_width != width:
+        raise ValueError(f"Reported treewidth is {width}, but the largest bag implies width {actual_width}.")
+
+
+def _validate_rooted_structure(bags: tuple[Bag, ...], tree: nx.Graph, root: Bag, parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]],
+                               depth: Mapping[Bag, int], postorder: tuple[Bag, ...]) -> None:
+    bag_set = set(bags)
+    if root not in bag_set:
+        raise ValueError("Root bag is not part of the decomposition.")
+    if set(parent) != bag_set:
+        raise ValueError("Parent mapping does not contain every bag exactly once.")
+    if set(children) != bag_set:
+        raise ValueError("Children mapping does not contain every bag exactly once.")
+    if set(depth) != bag_set:
+        raise ValueError("Depth mapping does not contain every bag exactly once.")
+    if parent[root] is not None or depth[root] != 0:
+        raise ValueError("Root bag must have no parent and depth zero.")
+
+    expected_tree_edges: set[TreeEdge] = set()
+    for bag in bags:
+        if bag == root:
+            continue
+        parent_bag = parent[bag]
+        if parent_bag is None:
+            raise ValueError(f"Non-root bag {_bag_key(bag)} has no parent.")
+
+        if not tree.has_edge(parent_bag, bag):
+            raise ValueError(f"Parent relation is not a decomposition edge: {_bag_key(parent_bag)} -> {_bag_key(bag)}.")
+        if bag not in children[parent_bag]:
+            raise ValueError(f"Parent and children mappings disagree for bag {_bag_key(bag)}.")
+        if depth[bag] != depth[parent_bag] + 1:
+            raise ValueError(f"Depth is inconsistent for bag {_bag_key(bag)}.")
+
+        expected_tree_edges.add(_canonical_tree_edge(parent_bag, bag))
+    actual_tree_edges = {_canonical_tree_edge(first, second) for first, second in tree.edges}
+    if expected_tree_edges != actual_tree_edges:
+        raise ValueError("Rooted parent relations do not reproduce the decomposition tree.")
+    if len(postorder) != len(bags) or set(postorder) != bag_set:
+        raise ValueError("Postorder must contain every bag exactly once.")
+    postorder_index = {bag: index for index, bag in enumerate(bags)}
+    if postorder[-1] != root:
+        raise ValueError("The root bag must be last in postorder.")
+    for parent_bag, child_bags in children.items():
+        for child in child_bags:
+            if parent.get(child) != parent_bag:
+                raise ValueError(f"Children mapping contains an invalid child relation for bag {_bag_key(child)}.")
+            if postorder_index[child] >= postorder_index[parent_bag]:
+                raise ValueError("A child bag appears after its parent in postorder.")
+
+
+def _validate_edge_ownership(source: JunctionGraph, bags: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]) -> None:
+    if set(owned_edges) != set(bags):
+        raise ValueError("Owned-edge mapping does not contain every bag exactly once.")
+    source_by_id = {edge.id: edge for edge in source.edges}
+    seen: list[int] = []
+    for bag in bags:
+        for edge_id, u, v in owned_edges[bag]:
+            edge = source_by_id.get(edge_id)
+            if edge is None:
+                raise ValueError(f"Unknown owned source edge ID {edge_id}.")
+            if (u, v) != (edge.u, edge.v):
+                raise ValueError(f"Owned record for source edge e{edge_id} has endpoints ({u}, {v}), expected ({edge.u}, {edge.v}).")
+            if u not in bag or v not in bag:
+                raise ValueError(f"Owner bag {_bag_key(bag)} does not contain both endpoints of source edge e{edge_id}.")
+            parent_bag = parent[bag]
+            if parent_bag is not None and u in parent_bag and v in parent_bag:
+                raise ValueError(f"Source edge e{edge_id} is not owned by its highest containing bag.")
+            seen.append(edge_id)
+    expected = sorted(source_by_id)
+    actual = sorted(seen)
+    if actual != expected:
+        raise ValueError(f"Source-edge ownership is incomplete or duplicated: expected IDs {expected}, found {actual}.")
+
+
+def validate_source_decomposition(source: JunctionGraph, decomposition: SourceDecomposition) -> None:
+    """Validate the complete rooted source decomposition and its bag plans."""
+    tree = nx.Graph()
+    tree.add_nodes_from(decomposition.bags)
+    tree.add_edges_from(decomposition.tree_edges)
+
+    validate_decomposition_tree(source, decomposition.width, tree)
+    _validate_rooted_structure(decomposition.bags, tree, decomposition.root, decomposition.parent, decomposition.children, decomposition.depth, decomposition.postorder)
+    _validate_edge_ownership(source, decomposition.bags, decomposition.parent, decomposition.owned_edges)
+    expected_plans = build_bag_plans(decomposition.postorder, decomposition.parent, decomposition.children, decomposition.owned_edges)
+    if set(decomposition.bag_plans) != set(decomposition.bags):
+        raise ValueError("Bag-plan mapping does not contain every bag exactly once.")
+
+    for bag in decomposition.bags:
+        if decomposition.bag_plans[bag] != expected_plans[bag]:
+            raise ValueError(f"Bag plan is inconsistent for bag {_bag_key(bag)}.")
+
