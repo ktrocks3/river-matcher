@@ -13,12 +13,16 @@ from river_matcher.witnesses import SourceGuidedWitnessFinder
 type SourceSampleKey = tuple[int, int, int]
 
 
+def _as_dtw_array(points: XYArray) -> XYArray:
+    return cast(XYArray, np.require(points, dtype=np.float64, requirements=["C", "W"]))
+
+
 class DynamicTimeWarpingDistance(BaseEdgeCost):
     name = CostName.DYNAMIC_TIME_WARPING_DISTANCE
     label = "normalized dynamic time warping distance"
 
     def __init__(self, resources: CostResources, *, rho: float = 10.0, edge_samples: int = 12, curve_samples: int = 80, warping_window: int | None = 8,
-            normalize: bool = True) -> None:
+                 normalize: bool = True) -> None:
         super().__init__(resources)
 
         resolved_curve_samples = int(curve_samples)
@@ -54,8 +58,7 @@ class DynamicTimeWarpingDistance(BaseEdgeCost):
         self._source_sample_cache[key] = samples
         if samples is not None:
             reverse_key = (key[0], key[2], key[1],)
-            reverse_samples = cast(XYArray, np.ascontiguousarray(samples[::-1], dtype=np.float64))
-            reverse_samples.setflags(write=False)
+            reverse_samples = cast(XYArray, np.array(samples[::-1], dtype=np.float64, order="C", copy=True))
             self._source_sample_cache.setdefault(reverse_key, reverse_samples)
 
         return samples
@@ -79,7 +82,10 @@ class DynamicTimeWarpingDistance(BaseEdgeCost):
         if witness_samples is None:
             return math.inf
 
-        value = float(dtw_ndim.distance_fast(source_samples, witness_samples, window=self.warping_window, inner_dist="squared euclidean"))
+        source_buffer = _as_dtw_array(source_samples)
+        witness_buffer = _as_dtw_array(witness_samples)
+
+        value = float(dtw_ndim.distance_fast(source_buffer, witness_buffer, window=self.warping_window, inner_dist="squared euclidean"))
 
         if not math.isfinite(value):
             return math.inf

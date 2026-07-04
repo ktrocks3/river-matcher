@@ -27,6 +27,7 @@ class CostName(StrEnum):
     SYMMETRIC_CORRIDOR_EXCEEDANCE = "symmetric_corridor_exceedance"
     DYNAMIC_TIME_WARPING_DISTANCE = "dynamic_time_warping_distance"
     DISCRETE_FRECHET_DISTANCE = "discrete_frechet_distance"
+    NOT_IMPLEMENTED = "test"
 
 
 @dataclass(slots=True)
