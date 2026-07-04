@@ -6,8 +6,17 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from river_matcher.decomposition import (BagPlan, TreewidthHeuristic, assign_edge_owners, build_bag_plans, build_simple_source_graph, build_source_decomposition,
-                                         root_tree_decomposition, validate_decomposition_tree, validate_source_decomposition, )
+from river_matcher.decomposition import (
+    BagPlan,
+    TreewidthHeuristic,
+    assign_edge_owners,
+    build_bag_plans,
+    build_simple_source_graph,
+    build_source_decomposition,
+    root_tree_decomposition,
+    validate_decomposition_tree,
+    validate_source_decomposition,
+)
 from river_matcher.models import JunctionEdge, JunctionGraph
 
 type EdgeSpec = tuple[int, int, int]

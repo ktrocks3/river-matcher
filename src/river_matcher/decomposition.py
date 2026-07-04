@@ -253,7 +253,7 @@ def _validate_rooted_structure(bags: tuple[Bag, ...], tree: DecompositionTree, r
         raise ValueError("Rooted parent relations do not reproduce the decomposition tree.")
     if len(postorder) != len(bags) or set(postorder) != bag_set:
         raise ValueError("Postorder must contain every bag exactly once.")
-    postorder_index = {bag: index for index, bag in enumerate(bags)}
+    postorder_index = {bag: index for index, bag in enumerate(postorder)}
     if postorder[-1] != root:
         raise ValueError("The root bag must be last in postorder.")
     for parent_bag, child_bags in children.items():
