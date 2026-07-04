@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Mapping
+from typing import cast
 
 import networkx as nx
 from networkx.algorithms.approximation.treewidth import treewidth_min_degree, treewidth_min_fill_in
@@ -15,11 +16,36 @@ type TreeEdge = tuple[Bag, Bag]
 type OwnedEdge = tuple[int, int, int]
 type OwnedEdgePosition = tuple[int, int, int]
 type ChildPositions = tuple[Bag, tuple[int, ...]]
+type SourceGraph = nx.Graph[int]
+type DecompositionTree = nx.Graph[Bag]
 
 
 class TreewidthHeuristic(StrEnum):
     MINIMUM_FILL_IN = "minimum_fill_in"
     MINIMUM_DEGREE = "minimum_degree"
+
+
+def build_simple_source_graph(source: JunctionGraph, ) -> SourceGraph:
+    graph = cast(SourceGraph, nx.Graph())
+    graph.add_nodes_from(source.vertices)
+    graph.add_edges_from((edge.u, edge.v) for edge in source.edges)
+    return graph
+
+
+def _normalize_decomposition_tree(raw_tree: DecompositionTree, ) -> DecompositionTree:
+    normalized = cast(DecompositionTree, nx.Graph())
+    bag_lookup: dict[object, Bag] = {}
+    for raw_bag in raw_tree.nodes:
+        bag = frozenset(int(vertex) for vertex in raw_bag)
+        if not bag:
+            raise ValueError("Tree decomposition contains an empty bag.")
+        if bag in bag_lookup.values():
+            raise ValueError("Tree decomposition contains duplicate normalized bag {_bag_key(bag)}.")
+        bag_lookup[raw_bag] = bag
+        normalized.add_node(bag)
+    for raw_first, raw_second in raw_tree.edges:
+        normalized.add_edge(bag_lookup[raw_first], bag_lookup[raw_second], )
+    return normalized
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,36 +95,8 @@ def _canonical_tree_edge(first: Bag, second: Bag) -> TreeEdge:
     return second, first
 
 
-def build_simple_source_graph(source: JunctionGraph) -> nx.Graph:
-    """ Return the simple graph used for tree decomposition.
-        Parallel source edges collapse to one graph edge here, but remain distinct in ``assign_edge_owneds`` through their unique source-edge IDs
-    """
-    graph = nx.Graph()
-    graph.add_nodes_from(source.vertices)
-    graph.add_edges_from((edge.u, edge.v) for edge in source.edges)
-    return graph
 
-
-def _normalize_decomposition_tree(raw_tree: nx.Graph) -> nx.Graph:
-    """Normalize NetworkX bag objects to ``frozenset[int]``"""
-    normalized = nx.Graph()
-    bag_lookup: dict[object, Bag] = {}
-
-    for raw_bag in raw_tree.nodes:
-        bag = frozenset(int(vertex) for vertex in raw_bag)
-        if not bag:
-            raise ValueError("Tree decomposition contains an empty bag")
-        if bag in bag_lookup.values():
-            raise ValueError(f"Tree decomposition contains duplicate normalized bag {_bag_key(bag)}.")
-        bag_lookup[raw_bag] = bag
-        normalized.add_node(bag)
-
-    for raw_first, raw_second in raw_tree.edges:
-        normalized.add_edge(bag_lookup[raw_first], bag_lookup[raw_second])
-    return normalized
-
-
-def choose_tree_decomposition(graph: nx.Graph) -> tuple[int, TreewidthHeuristic, int, int, nx.Graph]:
+def choose_tree_decomposition(graph: SourceGraph) -> tuple[int, TreewidthHeuristic, int, int, nx.Graph]:
     """Run both NetworkX heuristics and retain the lower-width decomposition."""
     minimum_fill_width, minimum_fill_tree = treewidth_min_fill_in(graph)
     minimum_degree_width, minimum_degree_tree = treewidth_min_degree(graph)
@@ -107,7 +105,7 @@ def choose_tree_decomposition(graph: nx.Graph) -> tuple[int, TreewidthHeuristic,
     return minimum_degree_width, TreewidthHeuristic.MINIMUM_DEGREE, minimum_fill_width, minimum_degree_width, _normalize_decomposition_tree(minimum_degree_tree)
 
 
-def root_tree_decomposition(tree: nx.Graph) -> tuple[Bag, dict[Bag, Bag | None], dict[Bag, tuple[Bag, ...]], dict[Bag, int], tuple[Bag, ...]]:
+def root_tree_decomposition(tree: DecompositionTree) -> tuple[Bag, dict[Bag, Bag | None], dict[Bag, tuple[Bag, ...]], dict[Bag, int], tuple[Bag, ...]]:
     """ Root a decomposition tree at a deterministic center bag.
         A center minimizes the maximum rooted depth. Lexicographic bag order breaks ties so repeated construction is deterministic for one decomposition.
     """
@@ -182,7 +180,7 @@ def build_bag_plans(postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None]
     return plans
 
 
-def validate_decomposition_tree(source: JunctionGraph, width: int, tree: nx.Graph) -> None:
+def validate_decomposition_tree(source: JunctionGraph, width: int, tree: DecompositionTree) -> None:
     """ Validate the three defining tree-decomposition properties.
         Every source vertex must occur, every source edge must be covered, and the bags containing one source vertex must form a connected subtree."""
     if tree.number_of_nodes() == 0:
@@ -220,7 +218,7 @@ def validate_decomposition_tree(source: JunctionGraph, width: int, tree: nx.Grap
         raise ValueError(f"Reported treewidth is {width}, but the largest bag implies width {actual_width}.")
 
 
-def _validate_rooted_structure(bags: tuple[Bag, ...], tree: nx.Graph, root: Bag, parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]],
+def _validate_rooted_structure(bags: tuple[Bag, ...], tree: DecompositionTree, root: Bag, parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]],
                                depth: Mapping[Bag, int], postorder: tuple[Bag, ...]) -> None:
     bag_set = set(bags)
     if root not in bag_set:
@@ -292,7 +290,7 @@ def _validate_edge_ownership(source: JunctionGraph, bags: tuple[Bag, ...], paren
 
 def validate_source_decomposition(source: JunctionGraph, decomposition: SourceDecomposition) -> None:
     """Validate the complete rooted source decomposition and its bag plans."""
-    tree = nx.Graph()
+    tree = cast(DecompositionTree, nx.Graph())
     tree.add_nodes_from(decomposition.bags)
     tree.add_edges_from(decomposition.tree_edges)
 
@@ -307,3 +305,26 @@ def validate_source_decomposition(source: JunctionGraph, decomposition: SourceDe
         if decomposition.bag_plans[bag] != expected_plans[bag]:
             raise ValueError(f"Bag plan is inconsistent for bag {_bag_key(bag)}.")
 
+
+def build_source_decomposition(source: JunctionGraph, *, validate: bool = True) -> SourceDecomposition:
+    """Build the rooted source tree decomposition used by the dynamic program."""
+    if not source.vertices:
+        raise ValueError("Cannot decompose a source graph without vertices.")
+
+    simple_graph = build_simple_source_graph(source)
+    width, heuristic, minimum_fill_width, minimum_degree_width, tree = choose_tree_decomposition(simple_graph)
+    validate_decomposition_tree(source, width, tree)
+    root, parent, children, depth, postorder = root_tree_decomposition(tree)
+
+    bags = tuple(sorted(tree.nodes, key=_bag_key))
+    tree_edges = tuple(sorted((_canonical_tree_edge(first, second) for first, second in tree.edges), key=lambda edge: (_bag_key(edge[0]), _bag_key(edge[1]),)))
+    owned_edges = assign_edge_owners(source, bags, parent, depth)
+    bag_plans = build_bag_plans(postorder, parent, children, owned_edges)
+
+    decomposition = SourceDecomposition(width=width, heuristic=heuristic, minimum_fill_width=minimum_fill_width, minimum_degree_width=minimum_degree_width, root=root, bags=bags,
+                                        tree_edges=tree_edges, parent=parent, children=children, depth=depth, postorder=postorder, owned_edges=owned_edges, bag_plans=bag_plans)
+
+    if validate:
+        validate_source_decomposition(source, decomposition)
+
+    return decomposition

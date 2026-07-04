@@ -1019,6 +1019,7 @@ legacy = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "types-networkx" },
     { name = "types-shapely" },
 ]
 
@@ -1047,7 +1048,10 @@ requires-dist = [
 provides-extras = ["experiments", "frechet", "legacy", "dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "types-shapely", specifier = ">=2.1.0.20260630" }]
+dev = [
+    { name = "types-networkx", specifier = ">=3.6.1.20260624" },
+    { name = "types-shapely", specifier = ">=2.1.0.20260630" },
+]
 
 [[package]]
 name = "ruff"
@@ -1259,6 +1263,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cd/08/8447f48fe3547ca92abae6875c63a7374b14b78f3b46518e16de45be640d/tslearn-0.8.1.tar.gz", hash = "sha256:68107857404e9a3869ed452fc3b8f1f0b5fdee61a04438c7ee957ec7e928e594", size = 9602140 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/da/969c0efec60dcf52fb7b9ed9244a4913b2a7f0a266a0be4700cc1141471e/tslearn-0.8.1-py3-none-any.whl", hash = "sha256:2a79e1447df8c0708cfb8b06a65826ecb9b3d62e1b5b98fa26abbc77766f782d", size = 387871 },
+]
+
+[[package]]
+name = "types-networkx"
+version = "3.6.1.20260624"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/f9/975c2bb35407c241fb788e9c75b2e2642af43a6c9cf81056a119dd98e59c/types_networkx-3.6.1.20260624.tar.gz", hash = "sha256:f031a9ee0bd27de4ab6d3e35a10f3492a4befc7b8c348607892b0ccb1b415d4d", size = 74060 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/d4/67136d3323dd8a8ecc8124531f737dee97819811026da20a2a72949f462a/types_networkx-3.6.1.20260624-py3-none-any.whl", hash = "sha256:071734f88733afaaa06cbb62eb8c603626f4f9aa18424771acbdd3a638828d9a", size = 162457 },
 ]
 
 [[package]]

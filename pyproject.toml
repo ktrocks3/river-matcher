@@ -114,5 +114,6 @@ skip_covered = true
 
 [dependency-groups]
 dev = [
+    "types-networkx>=3.6.1.20260624",
     "types-shapely>=2.1.0.20260630",
 ]
