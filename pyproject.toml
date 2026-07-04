@@ -106,3 +106,8 @@ source = ["river_matcher"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[dependency-groups]
+dev = [
+    "types-shapely>=2.1.0.20260630",
+]

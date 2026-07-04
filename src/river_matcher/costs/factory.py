@@ -4,13 +4,18 @@ from collections.abc import Callable
 from typing import Any
 
 from river_matcher.costs.base import BaseEdgeCost, CostName, CostResources
+from river_matcher.costs.hausdorff_distance import HausdorffDistance
 from river_matcher.costs.log_length_distortion import LogLengthDistortion
 from river_matcher.costs.relative_length_error import RelativeLengthError
 from river_matcher.models import JunctionGraph
 
 type CostConstructor = Callable[..., BaseEdgeCost]
 
-_COST_TYPES: dict[CostName, CostConstructor] = {CostName.RELATIVE_LENGTH_ERROR: RelativeLengthError, CostName.LOG_LENGTH_DISTORTION: LogLengthDistortion}
+_COST_TYPES: dict[CostName, CostConstructor] = {
+    CostName.RELATIVE_LENGTH_ERROR: RelativeLengthError,
+    CostName.LOG_LENGTH_DISTORTION: LogLengthDistortion,
+    CostName.HAUSDORFF_DISTANCE: HausdorffDistance,
+}
 
 
 def available_costs() -> tuple[CostName, ...]:
