@@ -4,9 +4,10 @@ import argparse
 import importlib.util
 import sys
 from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Mapping, Protocol, Sequence, cast
+from typing import Any, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
