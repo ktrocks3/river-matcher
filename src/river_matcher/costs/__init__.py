@@ -6,4 +6,4 @@ from river_matcher.costs.mean_distance_tangent import MeanDistanceTangent
 from river_matcher.costs.relative_length_error import RelativeLengthError
 
 __all__ = ["BaseEdgeCost", "CostFactory", "CostName", "CostRequest", "CostResources", "LogLengthDistortion", "RelativeLengthError", "available_costs", "create_cost",
-           "HausdorffDistance", "MeanDistanceTangent"]
+           "HausdorffDistance", "MeanDistanceTangent", ]

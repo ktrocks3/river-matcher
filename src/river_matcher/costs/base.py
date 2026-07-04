@@ -24,7 +24,7 @@ class CostName(StrEnum):
     LOG_LENGTH_DISTORTION = "log_length_distortion"
     MEAN_DISTANCE_TANGENT = "mean_distance_tangent"
     HAUSDORFF_DISTANCE = "hausdorff_distance"
-    SYMMETRIC_CORRIDOR_ERROR = "symmetric_corridor_error"
+    SYMMETRIC_CORRIDOR_EXCEEDANCE = "symmetric_corridor_exceedance"
     DYNAMIC_TIME_WARPING = "dynamic_time_warping"
     DISCRETE_FRECHET = "discrete_frechet"
 
