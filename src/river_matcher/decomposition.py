@@ -4,8 +4,10 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Mapping
+
 import networkx as nx
 from networkx.algorithms.approximation.treewidth import treewidth_min_degree, treewidth_min_fill_in
+
 from river_matcher.models import JunctionGraph
 
 type Bag = frozenset[int]
@@ -143,6 +145,7 @@ def root_tree_decomposition(tree: nx.Graph) -> tuple[Bag, dict[Bag, Bag | None],
             stack.append((child, False))
     return root, parent, children, depth, tuple(postorder)
 
+
 def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], depth: Mapping[Bag, int]) -> dict[Bag, tuple[OwnedEdge, ...]]:
     """ Assign every source multi-edge to the highest bag containing its endpoints.
         Parallel source edges receive separate ownership records even though they share the same endpoint pair."""
@@ -160,4 +163,48 @@ def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Map
         parent_bag = parent[owner]
         if parent_bag is not None and edge.u in parent_bag and edge.v in parent_bag:
             raise RuntimeError(f"Selected owner is not the highest bag for source edge e{edge.id}: ({edge.u}, {edge.v}).")
-        
+        owned_lists[owner].append((edge.id, edge.u, edge.v))
+    return {bag: tuple(owned_lists[bag]) for bag in bags}
+
+
+def build_bag_plans(postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]) -> \
+dict[Bag, BagPlan]:
+    """Precompute separator and owned-edge positions for every bag."""
+    plans: dict[Bag, BagPlan] = {}
+    for bag in postorder:
+        variables = tuple(sorted(bag))
+        positions = {vertex: index for index, vertex in enumerate(variables)}
+        parent_bag = parent[bag]
+        parent_positions = tuple(positions[vertex] for vertex in variables if parent_bag is not None and vertex in parent_bag)
+        child_positions = tuple((child, tuple(positions[vertex] for vertex in variables if vertex in child),) for child in children[bag])
+        owned_edge_positions = tuple((edge_id, positions[u], positions[v],) for edge_id, u, v in owned_edges[bag])
+        plans[bag] = BagPlan(bag=bag, variables=variables, parent_positions=parent_positions, child_positions=child_positions, owned_edge_positions=owned_edge_positions)
+    return plans
+
+
+def validate_decomposition_tree(source: JunctionGraph, width: int, tree: nx.Graph) -> None:
+    """ Validate the three defining tree-decomposition properties.
+        Every source vertex must occur, every source edge must be covered, and the bags containing one source vertex must form a connected subtree."""
+    if tree.number_of_nodes() == 0:
+        raise ValueError("Tree decomposition has no bags.")
+    if not nx.is_tree(tree):
+        raise ValueError("The decomposition graph is not a tree.")
+
+    bags = tuple(tree.nodes)
+    source_vertices = set(source.vertices)
+    covered_vertices: set[int] = set()
+    bags_by_vertex: defaultdict[int, set[Bag]] = defaultdict(set)
+
+    for bag in bags:
+        if not bag:
+            raise ValueError("Tree decomposition contains an empty bag.")
+        unknown = set(bag) - source_vertices
+        if unknown:
+            raise ValueError(f"Tree-decomposition bag contains unknown source vertices: {sorted(unknown)}.")
+        covered_vertices.update(bag)
+        for vertex in bag:
+            bags_by_vertex[vertex].add(bag)
+
+    if covered_vertices != source_vertices:
+        missing = sorted(source_vertices - covered_vertices)
+        raise ValueError(f"The decomposition graph has {len(missing)}-bags.")
