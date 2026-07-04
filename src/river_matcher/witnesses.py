@@ -4,14 +4,22 @@ import heapq
 import math
 import time
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, cast
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from river_matcher.geometry import PreparedPolyline, XYArray, orient_polyline, points_to_prepared_polyline_distances, polyline_length, prepare_polyline_segments, \
-    sample_polyline_by_arclength
+from river_matcher.geometry import (
+    PreparedPolyline,
+    XYArray,
+    orient_polyline,
+    points_to_prepared_polyline_distances,
+    polyline_length,
+    prepare_polyline_segments,
+    sample_polyline_by_arclength,
+)
 from river_matcher.models import JunctionEdge, JunctionGraph
 
 type FloatArray = NDArray[np.float64]
@@ -121,7 +129,7 @@ def _reconstruct_path(end: int, parent: ParentMap, parent_segment: ParentSegment
 
 
 class ShortestPathWitnessFinder:
-    """ Resolve ordinary geometric-length shortest paths in a target multigraph.
+    """ Resolve ordinary geometric-length the shortest paths in a target multigraph.
         Parallel edges remain separate adjacency entries and retain their own geometry during path reconstruction."""
 
     def __init__(self, target: JunctionGraph) -> None:
@@ -237,7 +245,7 @@ class SourceGuidedWitnessFinder:
         return stored
 
     def source_polyline(self, edge_id: int, u: int, v: int) -> XYArray | None:
-        """Return one source multiedge oriented from u toward v."""
+        """Return one source multi-edge oriented from u toward v."""
         key = (edge_id, u, v)
         if key in self._source_cache:
             return self._source_cache[key]
@@ -263,3 +271,80 @@ class SourceGuidedWitnessFinder:
     def _corridor_weights(self, prepared_source: PreparedPolyline) -> FloatArray:
         if not self._target_records:
             return _float64_array(np.empty(0, dtype=np.float64))
+        distances = points_to_prepared_polyline_distances(self._target_samples, prepared_source)
+        if distances is None:
+            return _float64_array(self._target_lengths * (1 + _LENGTH_TIE_BREAK))
+        distance_matrix = _float64_array(distances.reshape(len(self._target_records), self.edge_samples))
+        finite_rows = np.all(np.isfinite(distance_matrix), axis=1)
+        fractions = _float64_array(np.mean(distance_matrix > self.rho, axis=1))
+        fractions = fractions.copy()
+        fractions[~finite_rows] = 1.0
+        return _float64_array(fractions * self._target_lengths + _LENGTH_TIE_BREAK * self._target_lengths)
+
+    def _adjacency_for_source(self, edge_id: int) -> Adjacency:
+        if edge_id in self._adjacency_cache:
+            return self._adjacency_cache[edge_id]
+        started = time.perf_counter()
+        source = self._canonical_source_polyline(edge_id)
+        prepared_source = prepare_polyline_segments(source)
+        adjacency: defaultdict[int, list[Arc]] = defaultdict(list)
+        if prepared_source is not None:
+            weights = self._corridor_weights(prepared_source)
+            for index, record in enumerate(self._target_records):
+                weight = float(weights[index])
+                adjacency[record.u].append((record.v, weight, record.forward))
+                adjacency[record.v].append((record.u, weight, record.reverse))
+        result = dict(adjacency)
+        self._adjacency_cache[edge_id] = result
+        self.timing.adjacency_seconds += time.perf_counter() - started
+        self.timing.adjacency_seconds += 1
+        return result
+
+    def _tree(self, edge_id: int, start: int) -> ShortestPathTree:
+        key = (edge_id, start)
+        if key in self._tree_cache:
+            return self._tree_cache[key]
+        started = time.perf_counter()
+        if (edge_id not in self._source_edges) or (start not in self._target_vertices):
+            tree: ShortestPathTree = ({}, {}, {})
+        else:
+            tree = _dijkstra(self._adjacency_for_source(edge_id), start)
+        self._tree_cache[key] = tree
+        self.timing.dijkstra_seconds += time.perf_counter() - started
+        self.timing.dijkstra_runs += 1
+        return tree
+
+    def path(self, edge_id: int, u: int, v: int, target_start: int, target_end: int) -> XYArray | None:
+        key = (edge_id, u, v, target_start, target_end)
+        if key in self._path_cache:
+            return self._path_cache[key]
+        if target_start == target_end or target_start not in self._target_vertices or target_end not in self._target_vertices or self.source_polyline(edge_id, u, v) is None:
+            self._path_cache[key] = None
+            return None
+        _, parent, parent_segment = self._tree(edge_id, target_start)
+        path = _reconstruct_path(target_end, parent, parent_segment)
+        self._path_cache[key] = path
+
+        if path is not None:
+            self._path_cache.setdefault((edge_id, v, u, target_end, target_start), _readonly_xy(path[::-1]))
+        return path
+
+    def paths(self, requests: Iterable[WitnessRequest]) -> WitnessPaths:
+        """ Resolve several witness requests.
+            The tree cache ensures that requests sharing a source edge and mapped start vertex reuse one Dijkstra run."""
+        output: WitnessPaths = {}
+        for raw_request in requests:
+            request = tuple(int(value) for value in raw_request)
+            if len(request) != 5:
+                raise ValueError("Each witness request must contain (edge_id, u, v, target_start, target_end).")
+            key: WitnessRequest = request
+            output[key] = self.path(*key)
+        return output
+
+    def clear_cache(self):
+        self._canonical_source_cache.clear()
+        self._source_cache.clear()
+        self._adjacency_cache.clear()
+        self._tree_cache.clear()
+        self._path_cache.clear()
+        self.timing = WitnessTiming()
