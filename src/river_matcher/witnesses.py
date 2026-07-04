@@ -149,4 +149,62 @@ class ShortestPathWitnessFinder:
         self._tree_cache[start] = tree
         return tree
 
-    def distance(self, start:int, end: int) -> float:
+    def distance(self, start: int, end: int) -> float:
+        """Return the geometric shortest-path length."""
+        if (start not in self._target_vertices) or (end not in self._target_vertices):
+            return math.inf
+        if start == end:
+            return 0.0
+        distances, _, _ = self._tree(start)
+        return distances.get(end, math.inf)
+
+    def path(self, start: int, end: int) -> XYArray | None:
+        """Return the geometric shortest-path polyline from start to end."""
+        key = (start, end)
+        if key in self._path_cache:
+            return self._path_cache[key]
+        if (start == end) or (start not in self._target_vertices) or (end not in self._target_vertices):
+            self._path_cache[key] = None
+            return None
+        _, parent, parent_segment = self._tree(start)
+        path = _reconstruct_path(end, parent, parent_segment)
+        self._path_cache[key] = path
+
+        if path is not None:
+            self._path_cache.setdefault((end, start), _readonly_xy(path[::-1]))
+        return path
+
+    def paths(self, pairs: Iterable[TargetPair]) -> TargetPairPaths:
+        output: TargetPairPaths = {}
+        for raw_start, raw_end in pairs:
+            key = (int(raw_start), int(raw_end))
+            output[key] = self.path(*key)
+        return output
+
+    def clear_cache(self) -> None:
+        self._tree_cache.clear()
+        self._path_cache.clear()
+
+class SourceGuidedWitnessFinder:
+    """ Resolve target paths using one corridor-weighted graph per source edge.
+        Target edge weights are estimated from equally spaced samples and remain distinct for parallel target edges."""
+    def __init__(self, source: JunctionGraph, target: JunctionGraph, *, rho: float, edge_samples: int = 12) -> None:
+        radius = float(rho)
+        sample_count = int(edge_samples)
+
+        if not math.isfinite(radius) or radius <= 0.0:
+            raise ValueError(f"Witness radius must be positive and finite, got {radius}")
+        if sample_count < 2:
+            raise ValueError(f"Witness edge sample count must be at least 2, got {sample_count}")
+
+        self.source: JunctionGraph = source
+        self.target: JunctionGraph = target
+        self.rho: float = radius
+        self.edge_samples: int = sample_count
+        self.timing = WitnessTiming()
+        self._source_edges: dict[int, JunctionEdge] = {edge.id: edge for edge in self.source.edges}
+        self._target_vertices = set(target.vertices)
+        self._target_records = _prepare_target_edges(target, samples=sample_count)
+        target_samples = [record.samples for record in self._target_records if record.samples is not None]
+        if len(target_samples) != len(self._target_records):
+            raise RuntimeError()
