@@ -339,7 +339,7 @@ class SourceGuidedWitnessFinder:
             request = tuple(int(value) for value in raw_request)
 
             if len(request) != 5:
-                raise ValueError("Each witness request must contain " "(edge_id, u, v, target_start, target_end).")
+                raise ValueError("Each witness request must contain (edge_id, u, v, target_start, target_end).")
 
             edge_id, u, v, target_start, target_end = request
             key: WitnessRequest = (edge_id, u, v, target_start, target_end)

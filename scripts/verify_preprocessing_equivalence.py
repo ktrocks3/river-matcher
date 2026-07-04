@@ -231,7 +231,7 @@ def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float) -> t
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=("Compare the migrated preprocessing pipeline with the exact " "legacy v6 preprocessing implementation."))
+    parser = argparse.ArgumentParser(description=("Compare the migrated preprocessing pipeline with the exact legacy v6 preprocessing implementation."))
     parser.add_argument("--legacy-root", type=Path, required=True, help="Folder containing river_graph_matcher_app_v6.py and its sibling modules.")
     parser.add_argument("--atol", type=float, default=1e-12, help="Absolute tolerance for coordinates, lengths and polyline geometry.")
     parser.add_argument("graphs", type=Path, nargs="+", help="TopoTide graph files to compare.")

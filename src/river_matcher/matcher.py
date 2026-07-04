@@ -4,29 +4,20 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from operator import index
-from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
 
 from river_matcher.candidates import compute_candidate_sets
-from river_matcher.costs.base import CostName
+from river_matcher.costs.base import BaseEdgeCost, CostName
 from river_matcher.costs.factory import CostFactory
 from river_matcher.decomposition import SourceDecomposition, build_source_decomposition, validate_source_decomposition
-from river_matcher.dynamic_programming import DPStatistics, DPSolution, Objective, solve_tree_dp, solve_tree_dp_both
+from river_matcher.dynamic_programming import DPSolution, DPStatistics, Objective, solve_tree_dp, solve_tree_dp_both
 from river_matcher.models import JunctionGraph
 
 type FloatArray = NDArray[np.float64]
 type RawCandidateSets = Mapping[int, Iterable[int]]
 type NormalizedCandidateSets = Mapping[int, tuple[int, ...]]
-
-
-class MatchEdgeCost(Protocol):
-    name: CostName
-
-    def __call__(self, edge_id: int, source_u: int, source_v: int, target_u: int, target_v: int) -> float: ...
-
-    def witness(self, edge_id: int, source_u: int, source_v: int, target_u: int, target_v: int) -> FloatArray | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +106,7 @@ def _normalize_candidate_sets(source: JunctionGraph, target: JunctionGraph, cand
         unknown_target_vertices = sorted(set(candidates) - target_vertices)
 
         if unknown_target_vertices:
-            raise ValueError(f"Candidate set for source vertex {source_vertex} contains unknown target vertices " f"{unknown_target_vertices}.")
+            raise ValueError(f"Candidate set for source vertex {source_vertex} contains unknown target vertices {unknown_target_vertices}.")
 
         normalized[source_vertex] = candidates
 
@@ -126,7 +117,7 @@ def _candidate_statistics(candidate_sets: NormalizedCandidateSets) -> CandidateS
     sizes = tuple(len(candidates) for candidates in candidate_sets.values())
 
     return CandidateStatistics(source_vertices=len(sizes), empty_domains=sum(size == 0 for size in sizes), total_candidates=sum(sizes), minimum_candidates=min(sizes, default=0),
-        maximum_candidates=max(sizes, default=0), )
+                               maximum_candidates=max(sizes, default=0))
 
 
 def _realized_value(edges: tuple[MatchedEdge, ...], objective: Objective) -> float:
@@ -138,7 +129,7 @@ def _realized_value(edges: tuple[MatchedEdge, ...], objective: Objective) -> flo
     return max(values, default=0.0)
 
 
-def _materialize_solution(source: JunctionGraph, edge_cost: MatchEdgeCost, solution: DPSolution | None) -> MatchSolution | None:
+def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, solution: DPSolution | None) -> MatchSolution | None:
     if solution is None:
         return None
 
@@ -160,12 +151,12 @@ def _materialize_solution(source: JunctionGraph, edge_cost: MatchEdgeCost, solut
         value = float(edge_cost(edge.id, edge.u, edge.v, target_u, target_v))
 
         if not math.isfinite(value):
-            raise RuntimeError(f"Recovered solution contains nonfinite cost for source edge e{edge.id}: " f"({edge.u}, {edge.v}) -> ({target_u}, {target_v}).")
+            raise RuntimeError(f"Recovered solution contains nonfinite cost for source edge e{edge.id}: ({edge.u}, {edge.v}) -> ({target_u}, {target_v}).")
 
         witness = edge_cost.witness(edge.id, edge.u, edge.v, target_u, target_v)
 
         if witness is None:
-            raise RuntimeError(f"Recovered solution has no witness for source edge e{edge.id}: " f"({edge.u}, {edge.v}) -> ({target_u}, {target_v}).")
+            raise RuntimeError(f"Recovered solution has no witness for source edge e{edge.id}: ({edge.u}, {edge.v}) -> ({target_u}, {target_v}).")
 
         matched_edges.append(MatchedEdge(edge_id=edge.id, source_u=edge.u, source_v=edge.v, target_u=target_u, target_v=target_v, cost=value, witness=witness))
 
@@ -173,7 +164,7 @@ def _materialize_solution(source: JunctionGraph, edge_cost: MatchEdgeCost, solut
     realized_value = _realized_value(edges, solution.objective)
 
     if not math.isclose(realized_value, solution.value, rel_tol=1e-10, abs_tol=1e-12):
-        raise RuntimeError(f"Recovered {solution.objective.value} solution value is inconsistent: " f"DP={solution.value}, realized={realized_value}.")
+        raise RuntimeError(f"Recovered {solution.objective.value} solution value is inconsistent: DP={solution.value}, realized={realized_value}.")
 
     ordered_mapping = {source_vertex: mapping[source_vertex] for source_vertex in sorted(mapping)}
 
@@ -191,11 +182,11 @@ class RiverGraphMatcher:
     __slots__ = ("candidate_sets", "cost_factory", "decomposition", "source", "target")
 
     def __init__(self, source: JunctionGraph, target: JunctionGraph, *, candidate_rho: float = 10.0, top_k: int = 25, candidate_sets: RawCandidateSets | None = None,
-            decomposition: SourceDecomposition | None = None, validate_decomposition: bool = True, ) -> None:
+                 decomposition: SourceDecomposition | None = None, validate_decomposition: bool = True) -> None:
         self.source = source
         self.target = target
 
-        raw_candidate_sets = compute_candidate_sets(source, target, rho=candidate_rho, top_k=top_k) if candidate_sets is None else candidate_sets
+        raw_candidate_sets = (compute_candidate_sets(source, target, rho=candidate_rho, top_k=top_k) if candidate_sets is None else candidate_sets)
         self.candidate_sets = _normalize_candidate_sets(source, target, raw_candidate_sets)
 
         if decomposition is None:
@@ -218,19 +209,19 @@ class RiverGraphMatcher:
         result = solve_tree_dp(self.decomposition, self.candidate_sets, edge_cost, resolved_objective)
 
         return MatchResult(cost_name=edge_cost.name, candidate_sets=self.candidate_sets, candidate_statistics=self.candidate_statistics, decomposition=self.decomposition,
-            solution=_materialize_solution(self.source, edge_cost, result.solution), dp_statistics=result.statistics, )
+                           solution=_materialize_solution(self.source, edge_cost, result.solution), dp_statistics=result.statistics)
 
     def match_both(self, cost_name: CostName | str, **cost_options: object) -> BothMatchResult:
         edge_cost = self.cost_factory.create(cost_name, **cost_options)
         result = solve_tree_dp_both(self.decomposition, self.candidate_sets, edge_cost)
 
         return BothMatchResult(cost_name=edge_cost.name, candidate_sets=self.candidate_sets, candidate_statistics=self.candidate_statistics, decomposition=self.decomposition,
-            additive=_materialize_solution(self.source, edge_cost, result.additive), bottleneck=_materialize_solution(self.source, edge_cost, result.bottleneck),
-            dp_statistics=result.statistics, )
+                               additive=_materialize_solution(self.source, edge_cost, result.additive), bottleneck=_materialize_solution(self.source, edge_cost, result.bottleneck),
+                               dp_statistics=result.statistics)
 
 
 def match_graphs(source: JunctionGraph, target: JunctionGraph, cost_name: CostName | str, objective: Objective | str, *, candidate_rho: float = 10.0, top_k: int = 25,
-        cost_options: Mapping[str, object] | None = None, ) -> MatchResult:
+                 cost_options: Mapping[str, object] | None = None) -> MatchResult:
     """Prepare and solve one exact graph-matching objective."""
     matcher = RiverGraphMatcher(source, target, candidate_rho=candidate_rho, top_k=top_k)
 
@@ -238,7 +229,7 @@ def match_graphs(source: JunctionGraph, target: JunctionGraph, cost_name: CostNa
 
 
 def match_graphs_both(source: JunctionGraph, target: JunctionGraph, cost_name: CostName | str, *, candidate_rho: float = 10.0, top_k: int = 25,
-        cost_options: Mapping[str, object] | None = None) -> BothMatchResult:
+                      cost_options: Mapping[str, object] | None = None) -> BothMatchResult:
     """Prepare and solve both exact graph-matching objectives."""
     matcher = RiverGraphMatcher(source, target, candidate_rho=candidate_rho, top_k=top_k)
 

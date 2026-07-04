@@ -22,7 +22,7 @@ class HausdorffDistance(BaseEdgeCost):
             resolved_densify = float(densify)
 
             if not math.isfinite(resolved_densify) or resolved_densify <= 0.0 or resolved_densify > 1.0:
-                raise ValueError("Hausdorff densify must be greater than 0 " "and at most 1.")
+                raise ValueError("Hausdorff densify must be greater than 0 and at most 1.")
         else:
             resolved_densify = None
 
