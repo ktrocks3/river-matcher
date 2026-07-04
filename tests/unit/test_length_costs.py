@@ -20,17 +20,14 @@ def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
                            edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
     target = JunctionGraph(name="target", coordinates={10: (0.0, 0.0), 20: (3.0, 0.0), 30: (10.0, 0.0), 40: (11.0, 0.0)},
                            edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.5, 0.0), (3.0, 0.0)]), make_edge(11, 30, 40, [(10.0, 0.0), (11.0, 0.0)]),))
-
     return source, target
 
 
 def test_factory_creates_both_implemented_costs() -> None:
     source, target = make_graphs()
     factory = CostFactory(source, target)
-
     relative = factory.create(CostName.RELATIVE_LENGTH_ERROR)
     logarithmic = factory.create("log_length_distortion")
-
     assert isinstance(relative, RelativeLengthError)
     assert isinstance(logarithmic, LogLengthDistortion)
 
@@ -38,10 +35,8 @@ def test_factory_creates_both_implemented_costs() -> None:
 def test_factory_costs_share_graph_resources() -> None:
     source, target = make_graphs()
     factory = CostFactory(source, target)
-
     relative = factory.create("relative_length_error")
     logarithmic = factory.create("log_length_distortion")
-
     assert relative.resources is logarithmic.resources
     assert (relative.resources.shortest_path is logarithmic.resources.shortest_path)
 
@@ -54,7 +49,6 @@ def test_available_costs_only_lists_implemented_costs() -> None:
 def test_factory_rejects_unknown_cost_name() -> None:
     source, target = make_graphs()
     factory = CostFactory(source, target)
-
     with pytest.raises(ValueError, match="Unknown cost"):
         factory.create("not-a-cost")
 
@@ -62,16 +56,13 @@ def test_factory_rejects_unknown_cost_name() -> None:
 def test_factory_reports_named_but_unimplemented_cost() -> None:
     source, target = make_graphs()
     factory = CostFactory(source, target)
-
     with pytest.raises(NotImplementedError, match="not implemented yet"):
         factory.create(CostName.NOT_IMPLEMENTED)
 
 
 def test_standalone_factory_function_constructs_cost() -> None:
     source, target = make_graphs()
-
     cost = create_cost("relative_length_error", source, target)
-
     assert isinstance(cost, RelativeLengthError)
 
 
