@@ -335,9 +335,13 @@ class SourceGuidedWitnessFinder:
         output: WitnessPaths = {}
         for raw_request in requests:
             request = tuple(int(value) for value in raw_request)
+
             if len(request) != 5:
-                raise ValueError("Each witness request must contain (edge_id, u, v, target_start, target_end).")
-            key: WitnessRequest = request
+                raise ValueError("Each witness request must contain "
+                                 "(edge_id, u, v, target_start, target_end).")
+
+            edge_id, u, v, target_start, target_end = request
+            key: WitnessRequest = (edge_id, u, v, target_start, target_end)
             output[key] = self.path(*key)
         return output
 
