@@ -185,9 +185,11 @@ class ShortestPathWitnessFinder:
         self._tree_cache.clear()
         self._path_cache.clear()
 
+
 class SourceGuidedWitnessFinder:
     """ Resolve target paths using one corridor-weighted graph per source edge.
         Target edge weights are estimated from equally spaced samples and remain distinct for parallel target edges."""
+
     def __init__(self, source: JunctionGraph, target: JunctionGraph, *, rho: float, edge_samples: int = 12) -> None:
         radius = float(rho)
         sample_count = int(edge_samples)
@@ -207,4 +209,57 @@ class SourceGuidedWitnessFinder:
         self._target_records = _prepare_target_edges(target, samples=sample_count)
         target_samples = [record.samples for record in self._target_records if record.samples is not None]
         if len(target_samples) != len(self._target_records):
-            raise RuntimeError()
+            raise RuntimeError("At least one prepared target edge has no samples.")
+        if target_samples:
+            self._target_samples = _readonly_xy(np.vstack(target_samples))
+        else:
+            self._target_samples = _readonly_xy(np.empty((0, 2), dtype=np.float64))
+        self._target_lengths = _float64_array([record.length for record in self._target_records])
+        self._canonical_source_cache: dict[int, XYArray | None] = {}
+        self._source_cache: dict[tuple[int, int, int], XYArray | None] = {}
+        self._adjacency_cache: dict[int, Adjacency] = {}
+        self._tree_cache: dict[tuple[int, int], ShortestPathTree] = {}
+        self._path_cache: WitnessPaths = {}
+
+    def _canonical_source_polyline(self, edge_id: int) -> XYArray | None:
+        if edge_id in self._canonical_source_cache:
+            return self._canonical_source_cache[edge_id]
+        edge = self._source_edges.get(edge_id, None)
+        if edge is None:
+            self._canonical_source_cache[edge_id] = None
+            return None
+        polyline = orient_polyline(edge.polyline, self.source.coordinates[edge.u], self.source.coordinates[edge.v])
+        if polyline is None:
+            self._canonical_source_cache[edge_id] = None
+            return None
+        stored = _readonly_xy(polyline)
+        self._canonical_source_cache[edge_id] = stored
+        return stored
+
+    def source_polyline(self, edge_id: int, u: int, v: int) -> XYArray | None:
+        """Return one source multiedge oriented from u toward v."""
+        key = (edge_id, u, v)
+        if key in self._source_cache:
+            return self._source_cache[key]
+        edge = self._source_edges.get(edge_id, None)
+        canonical = self._canonical_source_polyline(edge_id)
+
+        if edge is None or canonical is None:
+            self._source_cache[key] = None
+            return None
+
+        if u == edge.u and v == edge.v:
+            polyline = canonical
+        elif u == edge.v and v != edge.u:
+            polyline = _readonly_xy(canonical[::-1])
+        else:
+            self._source_cache[key] = None
+            return None
+        self._source_cache[key] = polyline
+        if polyline is not None:
+            self._source_cache.setdefault((edge_id, v, u), _readonly_xy(polyline[::-1]))
+        return polyline
+
+    def _corridor_weights(self, prepared_source: PreparedPolyline) -> FloatArray:
+        if not self._target_records:
+            return _float64_array(np.empty(0, dtype=np.float64))
