@@ -48,7 +48,7 @@ def test_zero_radius_accepts_point_on_edge() -> None:
 
 def test_candidate_distance_uses_polyline_segments() -> None:
     source = make_graph("source", {1: (1.0, 1.1)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0), ]),))
+    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
 
     candidates = compute_candidate_sets(source, target, rho=0.11, top_k=10)
 
@@ -57,8 +57,9 @@ def test_candidate_distance_uses_polyline_segments() -> None:
 
 def test_candidates_are_ordered_by_edge_distance() -> None:
     source = make_graph("source", {1: (5.0, 0.5)})
-    target = make_graph("target", {10: (0.0, 0.0), 11: (10.0, 0.0), 12: (10.0, 2.0)},
-                        (make_edge(0, 10, 11, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 11, 12, [(0.0, 2.0), (10.0, 2.0)]),))
+    target = make_graph(
+        "target", {10: (0.0, 0.0), 11: (10.0, 0.0), 12: (10.0, 2.0)}, (make_edge(0, 10, 11, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 11, 12, [(0.0, 2.0), (10.0, 2.0)]))
+    )
 
     candidates = compute_candidate_sets(source, target, rho=2.0, top_k=10)
 
@@ -67,8 +68,9 @@ def test_candidates_are_ordered_by_edge_distance() -> None:
 
 def test_duplicate_vertices_keep_their_first_distance_order() -> None:
     source = make_graph("source", {1: (5.0, 0.0)})
-    target = make_graph("target", {10: (0.0, 2.0), 20: (0.0, 1.0), 30: (10.0, 1.0)},
-                        (make_edge(0, 10, 20, [(0.0, 2.0), (10.0, 2.0)]), make_edge(1, 20, 30, [(0.0, 1.0), (10.0, 1.0)]),))
+    target = make_graph(
+        "target", {10: (0.0, 2.0), 20: (0.0, 1.0), 30: (10.0, 1.0)}, (make_edge(0, 10, 20, [(0.0, 2.0), (10.0, 2.0)]), make_edge(1, 20, 30, [(0.0, 1.0), (10.0, 1.0)]))
+    )
 
     candidates = compute_candidate_sets(source, target, rho=3.0, top_k=10)
 
@@ -77,8 +79,11 @@ def test_duplicate_vertices_keep_their_first_distance_order() -> None:
 
 def test_equal_distance_preserves_target_edge_and_endpoint_order() -> None:
     source = make_graph("source", {1: (5.0, 0.0)})
-    target = make_graph("target", {10: (10.0, -1.0), 20: (0.0, -1.0), 30: (0.0, 1.0), 40: (10.0, 1.0)},
-                        (make_edge(99, 20, 10, [(0.0, -1.0), (10.0, -1.0)]), make_edge(3, 30, 40, [(0.0, 1.0), (10.0, 1.0)]),))
+    target = make_graph(
+        "target",
+        {10: (10.0, -1.0), 20: (0.0, -1.0), 30: (0.0, 1.0), 40: (10.0, 1.0)},
+        (make_edge(99, 20, 10, [(0.0, -1.0), (10.0, -1.0)]), make_edge(3, 30, 40, [(0.0, 1.0), (10.0, 1.0)])),
+    )
 
     candidates = compute_candidate_sets(source, target, rho=1.0, top_k=10)
 
@@ -96,8 +101,11 @@ def test_candidate_order_does_not_sort_vertex_ids() -> None:
 
 def test_top_k_truncates_after_deduplication() -> None:
     source = make_graph("source", {1: (5.0, 0.0)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (10.0, 0.0), 30: (0.0, 1.0), 40: (10.0, 1.0)},
-                        (make_edge(0, 10, 20, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 30, 40, [(0.0, 1.0), (10.0, 1.0)]),))
+    target = make_graph(
+        "target",
+        {10: (0.0, 0.0), 20: (10.0, 0.0), 30: (0.0, 1.0), 40: (10.0, 1.0)},
+        (make_edge(0, 10, 20, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 30, 40, [(0.0, 1.0), (10.0, 1.0)])),
+    )
 
     candidates = compute_candidate_sets(source, target, rho=2.0, top_k=3)
 
@@ -106,7 +114,7 @@ def test_top_k_truncates_after_deduplication() -> None:
 
 def test_parallel_edges_do_not_duplicate_candidate_vertices() -> None:
     source = make_graph("source", {1: (1.0, 0.2)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 10, 20, [(0.0, 0.0), (1.0, 0.5), (2.0, 0.0), ]),))
+    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 10, 20, [(0.0, 0.0), (1.0, 0.5), (2.0, 0.0)])))
 
     candidates = compute_candidate_sets(source, target, rho=1.0, top_k=10)
 
@@ -152,8 +160,11 @@ def test_target_without_edges_produces_empty_sets() -> None:
 
 def test_multiple_source_vertices_are_processed_independently() -> None:
     source = make_graph("source", {1: (1.0, 0.0), 2: (9.0, 5.0), 3: (100.0, 100.0)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (10.0, 0.0), 30: (0.0, 5.0), 40: (10.0, 5.0)},
-                        (make_edge(0, 10, 20, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 30, 40, [(0.0, 5.0), (10.0, 5.0)]),))
+    target = make_graph(
+        "target",
+        {10: (0.0, 0.0), 20: (10.0, 0.0), 30: (0.0, 5.0), 40: (10.0, 5.0)},
+        (make_edge(0, 10, 20, [(0.0, 0.0), (10.0, 0.0)]), make_edge(1, 30, 40, [(0.0, 5.0), (10.0, 5.0)])),
+    )
 
     candidates = compute_candidate_sets(source, target, rho=0.5, top_k=10)
 
@@ -169,7 +180,7 @@ def test_output_source_keys_are_deterministically_sorted() -> None:
     assert list(candidates) == [1, 5, 9]
 
 
-@pytest.mark.parametrize("rho", [-1.0, float("-inf"), float("inf"), float("nan"), ])
+@pytest.mark.parametrize("rho", [-1.0, float("-inf"), float("inf"), float("nan")])
 def test_invalid_radius_is_rejected(rho: float) -> None:
     source = make_graph("source", {1: (0.0, 0.0)})
     target = make_graph("target", {10: (0.0, 0.0)})
@@ -189,9 +200,16 @@ def test_invalid_top_k_is_rejected(top_k: int) -> None:
 
 def test_numba_and_reference_implementations_match_exactly() -> None:
     source = make_graph("source", {1: (0.0, 0.0), 2: (2.0, 0.8), 3: (4.0, -0.4), 4: (8.0, 2.0), 5: (20.0, 20.0)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (4.0, 0.0), 30: (8.0, 0.0), 40: (0.0, 2.0), 50: (8.0, 2.0)},
-                        (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 1.0), (4.0, 0.0), ]), make_edge(1, 20, 30, [(4.0, 0.0), (8.0, 0.0)]),
-                         make_edge(2, 40, 50, [(0.0, 2.0), (8.0, 2.0)]), make_edge(3, 10, 50, [(0.0, 0.0), (8.0, 2.0)]),))
+    target = make_graph(
+        "target",
+        {10: (0.0, 0.0), 20: (4.0, 0.0), 30: (8.0, 0.0), 40: (0.0, 2.0), 50: (8.0, 2.0)},
+        (
+            make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 1.0), (4.0, 0.0)]),
+            make_edge(1, 20, 30, [(4.0, 0.0), (8.0, 0.0)]),
+            make_edge(2, 40, 50, [(0.0, 2.0), (8.0, 2.0)]),
+            make_edge(3, 10, 50, [(0.0, 0.0), (8.0, 2.0)]),
+        ),
+    )
 
     accelerated = compute_candidate_sets(source, target, rho=1.25, top_k=4)
     reference = compute_candidate_sets_reference(source, target, rho=1.25, top_k=4)
@@ -201,8 +219,9 @@ def test_numba_and_reference_implementations_match_exactly() -> None:
 
 def test_numba_and_reference_match_for_zero_radius() -> None:
     source = make_graph("source", {1: (0.0, 0.0), 2: (1.0, 0.0), 3: (2.0, 1.0)})
-    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (2.0, 2.0)},
-                        (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 20, 30, [(2.0, 0.0), (2.0, 2.0)]),))
+    target = make_graph(
+        "target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (2.0, 2.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 20, 30, [(2.0, 0.0), (2.0, 2.0)]))
+    )
 
     accelerated = compute_candidate_sets(source, target, rho=0.0, top_k=10)
     reference = compute_candidate_sets_reference(source, target, rho=0.0, top_k=10)
@@ -214,6 +233,6 @@ def test_reference_and_accelerated_results_contain_finite_vertex_ids() -> None:
     source = make_graph("source", {1: (0.0, 0.0)})
     target = make_graph("target", {10: (-1.0, 0.0), 20: (1.0, 0.0)}, (make_edge(0, 10, 20, [(-1.0, 0.0), (1.0, 0.0)]),))
 
-    for implementation in (compute_candidate_sets, compute_candidate_sets_reference,):
+    for implementation in (compute_candidate_sets, compute_candidate_sets_reference):
         candidates = implementation(source, target, rho=0.0, top_k=10)
         assert all(isinstance(vertex, int) and math.isfinite(float(vertex)) for vertex in candidates[1])

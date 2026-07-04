@@ -25,14 +25,14 @@ class TreewidthHeuristic(StrEnum):
     MINIMUM_DEGREE = "minimum_degree"
 
 
-def build_simple_source_graph(source: JunctionGraph, ) -> SourceGraph:
+def build_simple_source_graph(source: JunctionGraph) -> SourceGraph:
     graph = cast(SourceGraph, nx.Graph())
     graph.add_nodes_from(source.vertices)
     graph.add_edges_from((edge.u, edge.v) for edge in source.edges)
     return graph
 
 
-def _normalize_decomposition_tree(raw_tree: DecompositionTree, ) -> DecompositionTree:
+def _normalize_decomposition_tree(raw_tree: DecompositionTree) -> DecompositionTree:
     normalized = cast(DecompositionTree, nx.Graph())
     bag_lookup: dict[object, Bag] = {}
     for raw_bag in raw_tree.nodes:
@@ -44,14 +44,15 @@ def _normalize_decomposition_tree(raw_tree: DecompositionTree, ) -> Decompositio
         bag_lookup[raw_bag] = bag
         normalized.add_node(bag)
     for raw_first, raw_second in raw_tree.edges:
-        normalized.add_edge(bag_lookup[raw_first], bag_lookup[raw_second], )
+        normalized.add_edge(bag_lookup[raw_first], bag_lookup[raw_second])
     return normalized
 
 
 @dataclass(frozen=True, slots=True)
 class BagPlan:
-    """ Precomputed variable positions used by the dynamic program.
-        Positions refer to the sorted ``variables`` tuple of this bag."""
+    """Precomputed variable positions used by the dynamic program.
+    Positions refer to the sorted ``variables`` tuple of this bag."""
+
     bag: Bag
     variables: tuple[int, ...]
     parent_positions: tuple[int, ...]
@@ -62,6 +63,7 @@ class BagPlan:
 @dataclass(frozen=True, slots=True)
 class SourceDecomposition:
     """Rooted tree decomposition and source-edge ownership information."""
+
     width: int
     heuristic: TreewidthHeuristic
     minimum_fill_width: int
@@ -95,7 +97,6 @@ def _canonical_tree_edge(first: Bag, second: Bag) -> TreeEdge:
     return second, first
 
 
-
 def choose_tree_decomposition(graph: SourceGraph) -> tuple[int, TreewidthHeuristic, int, int, nx.Graph]:
     """Run both NetworkX heuristics and retain the lower-width decomposition."""
     minimum_fill_width, minimum_fill_tree = treewidth_min_fill_in(graph)
@@ -106,8 +107,8 @@ def choose_tree_decomposition(graph: SourceGraph) -> tuple[int, TreewidthHeurist
 
 
 def root_tree_decomposition(tree: DecompositionTree) -> tuple[Bag, dict[Bag, Bag | None], dict[Bag, tuple[Bag, ...]], dict[Bag, int], tuple[Bag, ...]]:
-    """ Root a decomposition tree at a deterministic center bag.
-        A center minimizes the maximum rooted depth. Lexicographic bag order breaks ties so repeated construction is deterministic for one decomposition.
+    """Root a decomposition tree at a deterministic center bag.
+    A center minimizes the maximum rooted depth. Lexicographic bag order breaks ties so repeated construction is deterministic for one decomposition.
     """
     if tree.number_of_nodes() == 0:
         raise ValueError("Cannot root an empty tree decomposition.")
@@ -145,8 +146,8 @@ def root_tree_decomposition(tree: DecompositionTree) -> tuple[Bag, dict[Bag, Bag
 
 
 def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], depth: Mapping[Bag, int]) -> dict[Bag, tuple[OwnedEdge, ...]]:
-    """ Assign every source multi-edge to the highest bag containing its endpoints.
-        Parallel source edges receive separate ownership records even though they share the same endpoint pair."""
+    """Assign every source multi-edge to the highest bag containing its endpoints.
+    Parallel source edges receive separate ownership records even though they share the same endpoint pair."""
     bags_by_vertex: defaultdict[int, set[Bag]] = defaultdict(set)
     for bag in bags:
         for vertex in bag:
@@ -165,8 +166,9 @@ def assign_edge_owners(source: JunctionGraph, bags: tuple[Bag, ...], parent: Map
     return {bag: tuple(owned_lists[bag]) for bag in bags}
 
 
-def build_bag_plans(postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]) -> \
-        dict[Bag, BagPlan]:
+def build_bag_plans(
+    postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]], owned_edges: Mapping[Bag, tuple[OwnedEdge, ...]]
+) -> dict[Bag, BagPlan]:
     """Precompute separator and owned-edge positions for every bag."""
     plans: dict[Bag, BagPlan] = {}
     for bag in postorder:
@@ -174,15 +176,15 @@ def build_bag_plans(postorder: tuple[Bag, ...], parent: Mapping[Bag, Bag | None]
         positions = {vertex: index for index, vertex in enumerate(variables)}
         parent_bag = parent[bag]
         parent_positions = tuple(positions[vertex] for vertex in variables if parent_bag is not None and vertex in parent_bag)
-        child_positions = tuple((child, tuple(positions[vertex] for vertex in variables if vertex in child),) for child in children[bag])
-        owned_edge_positions = tuple((edge_id, positions[u], positions[v],) for edge_id, u, v in owned_edges[bag])
+        child_positions = tuple((child, tuple(positions[vertex] for vertex in variables if vertex in child)) for child in children[bag])
+        owned_edge_positions = tuple((edge_id, positions[u], positions[v]) for edge_id, u, v in owned_edges[bag])
         plans[bag] = BagPlan(bag=bag, variables=variables, parent_positions=parent_positions, child_positions=child_positions, owned_edge_positions=owned_edge_positions)
     return plans
 
 
 def validate_decomposition_tree(source: JunctionGraph, width: int, tree: DecompositionTree) -> None:
-    """ Validate the three defining tree-decomposition properties.
-        Every source vertex must occur, every source edge must be covered, and the bags containing one source vertex must form a connected subtree."""
+    """Validate the three defining tree-decomposition properties.
+    Every source vertex must occur, every source edge must be covered, and the bags containing one source vertex must form a connected subtree."""
     if tree.number_of_nodes() == 0:
         raise ValueError("Tree decomposition has no bags.")
     if not nx.is_tree(tree):
@@ -218,8 +220,15 @@ def validate_decomposition_tree(source: JunctionGraph, width: int, tree: Decompo
         raise ValueError(f"Reported treewidth is {width}, but the largest bag implies width {actual_width}.")
 
 
-def _validate_rooted_structure(bags: tuple[Bag, ...], tree: DecompositionTree, root: Bag, parent: Mapping[Bag, Bag | None], children: Mapping[Bag, tuple[Bag, ...]],
-                               depth: Mapping[Bag, int], postorder: tuple[Bag, ...]) -> None:
+def _validate_rooted_structure(
+    bags: tuple[Bag, ...],
+    tree: DecompositionTree,
+    root: Bag,
+    parent: Mapping[Bag, Bag | None],
+    children: Mapping[Bag, tuple[Bag, ...]],
+    depth: Mapping[Bag, int],
+    postorder: tuple[Bag, ...],
+) -> None:
     bag_set = set(bags)
     if root not in bag_set:
         raise ValueError("Root bag is not part of the decomposition.")
@@ -317,12 +326,25 @@ def build_source_decomposition(source: JunctionGraph, *, validate: bool = True) 
     root, parent, children, depth, postorder = root_tree_decomposition(tree)
 
     bags = tuple(sorted(tree.nodes, key=_bag_key))
-    tree_edges = tuple(sorted((_canonical_tree_edge(first, second) for first, second in tree.edges), key=lambda edge: (_bag_key(edge[0]), _bag_key(edge[1]),)))
+    tree_edges = tuple(sorted((_canonical_tree_edge(first, second) for first, second in tree.edges), key=lambda edge: (_bag_key(edge[0]), _bag_key(edge[1]))))
     owned_edges = assign_edge_owners(source, bags, parent, depth)
     bag_plans = build_bag_plans(postorder, parent, children, owned_edges)
 
-    decomposition = SourceDecomposition(width=width, heuristic=heuristic, minimum_fill_width=minimum_fill_width, minimum_degree_width=minimum_degree_width, root=root, bags=bags,
-                                        tree_edges=tree_edges, parent=parent, children=children, depth=depth, postorder=postorder, owned_edges=owned_edges, bag_plans=bag_plans)
+    decomposition = SourceDecomposition(
+        width=width,
+        heuristic=heuristic,
+        minimum_fill_width=minimum_fill_width,
+        minimum_degree_width=minimum_degree_width,
+        root=root,
+        bags=bags,
+        tree_edges=tree_edges,
+        parent=parent,
+        children=children,
+        depth=depth,
+        postorder=postorder,
+        owned_edges=owned_edges,
+        bag_plans=bag_plans,
+    )
 
     if validate:
         validate_source_decomposition(source, decomposition)

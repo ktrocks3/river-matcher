@@ -10,8 +10,9 @@ from river_matcher.witnesses import SourceGuidedWitnessFinder
 
 
 @njit(cache=True, fastmath=False)
-def _directed_mean_corridor_exceedance(sample_points: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: FloatArray,
-                                       corridor_radius: float) -> float:
+def _directed_mean_corridor_exceedance(
+    sample_points: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: FloatArray, corridor_radius: float
+) -> float:
     sample_count = sample_points.shape[0]
     segment_count = segment_starts.shape[0]
     if sample_count == 0 or segment_count == 0:
@@ -63,7 +64,7 @@ class SymmetricCorridorExceedance(BaseEdgeCost):
         self.edge_samples = int(edge_samples)
         self.curve_samples = resolved_curve_samples
         self.corridor_radius = resolved_corridor_radius
-        self._finder: SourceGuidedWitnessFinder = (resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples))
+        self._finder: SourceGuidedWitnessFinder = resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples)
         self._source_sample_cache: dict[int, XYArray | None] = {}
         self._source_prepared_cache: dict[int, PreparedPolyline | None] = {}
 
@@ -73,14 +74,14 @@ class SymmetricCorridorExceedance(BaseEdgeCost):
     def _source_samples(self, edge_id: int) -> XYArray | None:
         if edge_id not in self._source_sample_cache:
             edge = self._source_edges[edge_id]
-            self._source_sample_cache[edge_id] = (self._sample_curve(edge.polyline))
+            self._source_sample_cache[edge_id] = self._sample_curve(edge.polyline)
 
         return self._source_sample_cache[edge_id]
 
     def _source_prepared(self, edge_id: int) -> PreparedPolyline | None:
         if edge_id not in self._source_prepared_cache:
             edge = self._source_edges[edge_id]
-            self._source_prepared_cache[edge_id] = (prepare_polyline_segments(edge.polyline))
+            self._source_prepared_cache[edge_id] = prepare_polyline_segments(edge.polyline)
         return self._source_prepared_cache[edge_id]
 
     def _compute(self, request: CostRequest) -> float:

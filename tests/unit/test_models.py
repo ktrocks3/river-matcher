@@ -22,7 +22,7 @@ def make_graph(edges=None):
 
 
 def test_edge_converts_identifiers_to_integers():
-    edge_data: dict[str, Any] = {"id": "7", "u": "1", "v": "2", "polyline": [[0.0, 0.0], [1.0, 0.0]], }
+    edge_data: dict[str, Any] = {"id": "7", "u": "1", "v": "2", "polyline": [[0.0, 0.0], [1.0, 0.0]]}
 
     edge = JunctionEdge(**edge_data)
 
@@ -38,16 +38,16 @@ def test_edge_calculates_polyline_length():
 
 
 def test_edge_removes_consecutive_duplicate_points():
-    edge = make_edge(polyline=[[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [2.0, 0.0], ])
+    edge = make_edge(polyline=[[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [1.0, 0.0], [2.0, 0.0]])
 
-    expected = np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], ], dtype=np.float64)
+    expected = np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]], dtype=np.float64)
 
     np.testing.assert_array_equal(edge.polyline, expected)
     assert edge.length == pytest.approx(2.0)
 
 
 def test_edge_stores_contiguous_float64_polyline():
-    input_points = np.asarray([[0, 0], [1, 1], [2, 2], ], dtype=np.int32)[::2]
+    input_points = np.asarray([[0, 0], [1, 1], [2, 2]], dtype=np.int32)[::2]
 
     edge = make_edge(polyline=input_points)
 
@@ -74,13 +74,13 @@ def test_self_loop_is_rejected():
         make_edge(u=1, v=1)
 
 
-@pytest.mark.parametrize("polyline", [[], [[0.0, 0.0]], [0.0, 1.0], [[0.0, 0.0, 1.0], [1.0, 1.0, 2.0]], ])
+@pytest.mark.parametrize("polyline", [[], [[0.0, 0.0]], [0.0, 1.0], [[0.0, 0.0, 1.0], [1.0, 1.0, 2.0]]])
 def test_invalid_polyline_shape_is_rejected(polyline):
     with pytest.raises(ValueError, match="shape"):
         make_edge(polyline=polyline)
 
 
-@pytest.mark.parametrize("polyline", [[[0.0, 0.0], [math.nan, 1.0]], [[0.0, 0.0], [math.inf, 1.0]], [[0.0, 0.0], [-math.inf, 1.0]], ])
+@pytest.mark.parametrize("polyline", [[[0.0, 0.0], [math.nan, 1.0]], [[0.0, 0.0], [math.inf, 1.0]], [[0.0, 0.0], [-math.inf, 1.0]]])
 def test_nonfinite_polyline_coordinates_are_rejected(polyline):
     with pytest.raises(ValueError, match="NaN or infinite"):
         make_edge(polyline=polyline)
@@ -88,7 +88,7 @@ def test_nonfinite_polyline_coordinates_are_rejected(polyline):
 
 def test_zero_length_polyline_is_rejected():
     with pytest.raises(ValueError, match="distinct points"):
-        make_edge(polyline=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], ])
+        make_edge(polyline=[[1.0, 1.0], [1.0, 1.0], [1.0, 1.0]])
 
 
 def test_parallel_edges_with_different_ids_are_accepted():

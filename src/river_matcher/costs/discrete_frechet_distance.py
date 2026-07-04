@@ -28,11 +28,11 @@ class DiscreteFrechetDistance(BaseEdgeCost):
         self.rho = float(rho)
         self.edge_samples = int(edge_samples)
         self.curve_samples = resolved_curve_samples
-        self._finder: SourceGuidedWitnessFinder = (resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples))
-        self._source_sample_cache: dict[SourceSampleKey, XYArray | None,] = {}
+        self._finder: SourceGuidedWitnessFinder = resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples)
+        self._source_sample_cache: dict[SourceSampleKey, XYArray | None] = {}
 
     def _source_samples(self, edge_id: int, source_u: int, source_v: int) -> XYArray | None:
-        key = (int(edge_id), int(source_u), int(source_v),)
+        key = (int(edge_id), int(source_u), int(source_v))
 
         if key in self._source_sample_cache:
             return self._source_sample_cache[key]
@@ -47,8 +47,8 @@ class DiscreteFrechetDistance(BaseEdgeCost):
         self._source_sample_cache[key] = samples
 
         if samples is not None:
-            reverse_key = (key[0], key[2], key[1],)
-            reverse_samples = cast(XYArray, np.ascontiguousarray(samples[::-1], dtype=np.float64, ), )
+            reverse_key = (key[0], key[2], key[1])
+            reverse_samples = cast(XYArray, np.ascontiguousarray(samples[::-1], dtype=np.float64))
             reverse_samples.setflags(write=False)
             self._source_sample_cache.setdefault(reverse_key, reverse_samples)
         return samples

@@ -16,10 +16,14 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
-    source = JunctionGraph(name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)},
-                           edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
-    target = JunctionGraph(name="target", coordinates={10: (0.0, 0.0), 20: (3.0, 0.0), 30: (10.0, 0.0), 40: (11.0, 0.0)},
-                           edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.5, 0.0), (3.0, 0.0)]), make_edge(11, 30, 40, [(10.0, 0.0), (11.0, 0.0)]),))
+    source = JunctionGraph(
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+    )
+    target = JunctionGraph(
+        name="target",
+        coordinates={10: (0.0, 0.0), 20: (3.0, 0.0), 30: (10.0, 0.0), 40: (11.0, 0.0)},
+        edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.5, 0.0), (3.0, 0.0)]), make_edge(11, 30, 40, [(10.0, 0.0), (11.0, 0.0)])),
+    )
     return source, target
 
 
@@ -38,12 +42,19 @@ def test_factory_costs_share_graph_resources() -> None:
     relative = factory.create("relative_length_error")
     logarithmic = factory.create("log_length_distortion")
     assert relative.resources is logarithmic.resources
-    assert (relative.resources.shortest_path is logarithmic.resources.shortest_path)
+    assert relative.resources.shortest_path is logarithmic.resources.shortest_path
 
 
 def test_available_costs_only_lists_implemented_costs() -> None:
-    assert available_costs() == (CostName.RELATIVE_LENGTH_ERROR, CostName.LOG_LENGTH_DISTORTION, CostName.MEAN_DISTANCE_TANGENT, CostName.HAUSDORFF_DISTANCE,
-                                 CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE, CostName.DISCRETE_FRECHET_DISTANCE, CostName.DYNAMIC_TIME_WARPING_DISTANCE)
+    assert available_costs() == (
+        CostName.RELATIVE_LENGTH_ERROR,
+        CostName.LOG_LENGTH_DISTORTION,
+        CostName.MEAN_DISTANCE_TANGENT,
+        CostName.HAUSDORFF_DISTANCE,
+        CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE,
+        CostName.DISCRETE_FRECHET_DISTANCE,
+        CostName.DYNAMIC_TIME_WARPING_DISTANCE,
+    )
 
 
 def test_factory_rejects_unknown_cost_name() -> None:
@@ -182,7 +193,7 @@ def test_edge_ok_uses_inclusive_threshold() -> None:
 def test_repeated_requests_use_cost_cache() -> None:
     source, target = make_graphs()
     cost = CostFactory(source, target).create("relative_length_error")
-    request: CostRequest = (0, 1, 2, 10, 20,)
+    request: CostRequest = (0, 1, 2, 10, 20)
 
     first = cost(*request)
     second = cost(*request)
@@ -200,7 +211,7 @@ def test_two_costs_reuse_same_shortest_path_tree() -> None:
     relative(0, 1, 2, 10, 20)
     logarithmic(0, 1, 2, 10, 20)
 
-    assert (len(factory.resources.shortest_path._tree_cache) == 1)
+    assert len(factory.resources.shortest_path._tree_cache) == 1
 
 
 def test_clear_cache_removes_cost_and_witness_entries() -> None:

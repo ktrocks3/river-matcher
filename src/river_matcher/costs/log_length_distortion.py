@@ -9,8 +9,9 @@ _MINIMUM_LENGTH = 1e-12
 
 
 class LogLengthDistortion(BaseEdgeCost):
-    """ Absolute logarithmic distortion of target-network length.
-        Swapping the two lengths leaves the value unchanged because abs(log(a / b)) equals abs(log(b / a))."""
+    """Absolute logarithmic distortion of target-network length.
+    Swapping the two lengths leaves the value unchanged because abs(log(a / b)) equals abs(log(b / a))."""
+
     name = CostName.LOG_LENGTH_DISTORTION
     label = "absolute log shortest-path length distortion"
 

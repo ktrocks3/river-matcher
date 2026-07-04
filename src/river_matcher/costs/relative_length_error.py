@@ -9,8 +9,9 @@ _MINIMUM_LENGTH = 1e-12
 
 
 class RelativeLengthError(BaseEdgeCost):
-    """ Absolute relative difference between source and target-network length.
-        The value is zero when both lengths agree and remains a conventional lower-is-better cost for both additive and bottleneck optimization."""
+    """Absolute relative difference between source and target-network length.
+    The value is zero when both lengths agree and remains a conventional lower-is-better cost for both additive and bottleneck optimization."""
+
     name = CostName.RELATIVE_LENGTH_ERROR
     label = "relative shortest-path length error"
 

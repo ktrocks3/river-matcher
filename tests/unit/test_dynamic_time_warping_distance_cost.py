@@ -19,19 +19,28 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
-    source = JunctionGraph(name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)},
-                           edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
-    target = JunctionGraph(name="target", coordinates={10: (0.0, 0.0), 20: (1.0, 1.0), 30: (2.0, 0.0), 40: (0.0, 1.0), 50: (2.0, 1.0), 60: (10.0, 0.0), 70: (11.0, 0.0)},
-                           edges=(make_edge(10, 10, 20, [(0.0, 0.0), (1.0, 1.0)]), make_edge(11, 20, 30, [(1.0, 1.0), (2.0, 0.0)]), make_edge(12, 40, 50, [(0.0, 1.0), (2.0, 1.0)]),
-                                  make_edge(13, 60, 70, [(10.0, 0.0), (11.0, 0.0)]),))
+    source = JunctionGraph(
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+    )
+    target = JunctionGraph(
+        name="target",
+        coordinates={10: (0.0, 0.0), 20: (1.0, 1.0), 30: (2.0, 0.0), 40: (0.0, 1.0), 50: (2.0, 1.0), 60: (10.0, 0.0), 70: (11.0, 0.0)},
+        edges=(
+            make_edge(10, 10, 20, [(0.0, 0.0), (1.0, 1.0)]),
+            make_edge(11, 20, 30, [(1.0, 1.0), (2.0, 0.0)]),
+            make_edge(12, 40, 50, [(0.0, 1.0), (2.0, 1.0)]),
+            make_edge(13, 60, 70, [(10.0, 0.0), (11.0, 0.0)]),
+        ),
+    )
 
     return source, target
 
 
 def make_cost(*, rho: float = 2.0, edge_samples: int = 12, curve_samples: int = 33, warping_window: int | None = 8, normalize: bool = True) -> DynamicTimeWarpingDistance:
     source, target = make_graphs()
-    cost = CostFactory(source, target).create(CostName.DYNAMIC_TIME_WARPING_DISTANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples,
-                                              warping_window=warping_window, normalize=normalize)
+    cost = CostFactory(source, target).create(
+        CostName.DYNAMIC_TIME_WARPING_DISTANCE, rho=rho, edge_samples=edge_samples, curve_samples=curve_samples, warping_window=warping_window, normalize=normalize
+    )
     assert isinstance(cost, DynamicTimeWarpingDistance)
     return cost
 
@@ -48,10 +57,11 @@ def dynamic_time_warping_reference(first: FloatArray, second: FloatArray) -> flo
 
     for first_index in range(1, len(first) + 1):
         for second_index in range(1, len(second) + 1):
-            difference = (first[first_index - 1] - second[second_index - 1])
+            difference = first[first_index - 1] - second[second_index - 1]
             local_cost = float(np.dot(difference, difference))
-            table[first_index, second_index] = (
-                    local_cost + min(table[first_index - 1, second_index], table[first_index, second_index - 1], table[first_index - 1, second_index - 1]))
+            table[first_index, second_index] = local_cost + min(
+                table[first_index - 1, second_index], table[first_index, second_index - 1], table[first_index - 1, second_index - 1]
+            )
 
     return math.sqrt(float(table[-1, -1]))
 
@@ -59,7 +69,7 @@ def dynamic_time_warping_reference(first: FloatArray, second: FloatArray) -> flo
 def test_factory_creates_dynamic_time_warping_cost() -> None:
     cost = make_cost()
 
-    assert (cost.name is CostName.DYNAMIC_TIME_WARPING_DISTANCE)
+    assert cost.name is CostName.DYNAMIC_TIME_WARPING_DISTANCE
     assert cost.label == "normalized dynamic time warping distance"
 
 
@@ -196,7 +206,7 @@ def test_batch_preserves_request_order() -> None:
 
 def test_repeated_requests_use_local_caches() -> None:
     cost = make_cost()
-    cost_request: CostRequest = (1, 1, 2, 10, 30,)
+    cost_request: CostRequest = (1, 1, 2, 10, 30)
 
     first = cost(*cost_request)
     first_witness = cost.witness(*cost_request)

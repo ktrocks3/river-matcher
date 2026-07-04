@@ -9,8 +9,8 @@ from river_matcher.witnesses import SourceGuidedWitnessFinder, XYArray
 
 
 class HausdorffDistance(BaseEdgeCost):
-    """ Symmetric discrete Hausdorff distance between a source edge and its source-guided target witness.
-        The result uses the same coordinate units as the input graphs."""
+    """Symmetric discrete Hausdorff distance between a source edge and its source-guided target witness.
+    The result uses the same coordinate units as the input graphs."""
 
     name = CostName.HAUSDORFF_DISTANCE
     label = "source-guided Hausdorff distance"
@@ -22,15 +22,14 @@ class HausdorffDistance(BaseEdgeCost):
             resolved_densify = float(densify)
 
             if not math.isfinite(resolved_densify) or resolved_densify <= 0.0 or resolved_densify > 1.0:
-                raise ValueError("Hausdorff densify must be greater than 0 "
-                                 "and at most 1.")
+                raise ValueError("Hausdorff densify must be greater than 0 " "and at most 1.")
         else:
             resolved_densify = None
 
         self.rho = float(rho)
         self.edge_samples = int(edge_samples)
         self.densify = resolved_densify
-        self._finder: SourceGuidedWitnessFinder = (resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples))
+        self._finder: SourceGuidedWitnessFinder = resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples)
         self._source_geometry_cache: dict[int, LineString] = {}
 
     def _source_geometry(self, edge_id: int) -> LineString:

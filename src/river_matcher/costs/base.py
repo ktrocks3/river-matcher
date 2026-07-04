@@ -32,8 +32,9 @@ class CostName(StrEnum):
 
 @dataclass(slots=True)
 class CostResources:
-    """ Shared graph-dependent resources used by multiple cost functions.
-        One factory owns one resource container, allowing costs with compatible witness settings to reuse path trees, corridor graphs and path geometry."""
+    """Shared graph-dependent resources used by multiple cost functions.
+    One factory owns one resource container, allowing costs with compatible witness settings to reuse path trees, corridor graphs and path geometry."""
+
     source: JunctionGraph
     target: JunctionGraph
     shortest_path: ShortestPathWitnessFinder = field(init=False)
@@ -56,6 +57,7 @@ class CostResources:
 
 class BaseEdgeCost(ABC):
     """Common cached interface implemented by every local edge cost."""
+
     name: ClassVar[CostName]
     label: ClassVar[str]
 
@@ -90,8 +92,8 @@ class BaseEdgeCost(ABC):
         return value
 
     def batch(self, requests: Iterable[CostRequest]) -> FloatArray:
-        """ Evaluate several requests.
-            Expensive subclasses should override this method with a vectorized, compiled or library-backed implementation."""
+        """Evaluate several requests.
+        Expensive subclasses should override this method with a vectorized, compiled or library-backed implementation."""
         normalized = [self._request(*req) for req in requests]
         output = np.empty(len(normalized), dtype=float)
         for i, req in enumerate(normalized):
@@ -114,7 +116,7 @@ class BaseEdgeCost(ABC):
         self._cost_cache.clear()
         self._witness_cache.clear()
 
-    def _source_edge(self, request: CostRequest, ) -> JunctionEdge | None:
+    def _source_edge(self, request: CostRequest) -> JunctionEdge | None:
         edge_id, source_u, source_v, _, _ = request
         edge = self._source_edges.get(edge_id)
         if edge is None:
@@ -123,9 +125,9 @@ class BaseEdgeCost(ABC):
             return edge
         return None
 
-    def _valid_target_pair(self, request: CostRequest, ) -> bool:
+    def _valid_target_pair(self, request: CostRequest) -> bool:
         _, _, _, target_u, target_v = request
         return target_u != target_v and target_u in self._target_vertices and target_v in self._target_vertices
 
-    def _remember_witness(self, request: CostRequest, witness: XYArray | None, ) -> None:
+    def _remember_witness(self, request: CostRequest, witness: XYArray | None) -> None:
         self._witness_cache[request] = witness

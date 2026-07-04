@@ -116,8 +116,17 @@ def _load_legacy_app(legacy_root: Path) -> ModuleType:
     finally:
         sys.path.remove(str(root))
 
-    required = ("read_topotide_graph", "filter_valid", "compress_to_junction_graph", "clean_junction_graph", "edge_polyline", "GraphData", "compute_candidate_sets_numba",
-                "make_shortest_path_polyline_fn", "make_source_guided_witness_finder",)
+    required = (
+        "read_topotide_graph",
+        "filter_valid",
+        "compress_to_junction_graph",
+        "clean_junction_graph",
+        "edge_polyline",
+        "GraphData",
+        "compute_candidate_sets_numba",
+        "make_shortest_path_polyline_fn",
+        "make_source_guided_witness_finder",
+    )
     missing = [name for name in required if not callable(getattr(module, name, None))]
     if missing:
         raise AttributeError(f"Legacy application is missing callables: {', '.join(missing)}.")
@@ -129,7 +138,7 @@ def _load_legacy_graph(legacy_app: ModuleType, path: Path) -> LegacyGraphData:
     """Reproduce the lightweight graph preprocessing used by v6."""
     raw_vertices, raw_edges = legacy_app.read_topotide_graph(str(path))
     vertices, edges = legacy_app.filter_valid(raw_vertices, raw_edges)
-    nodes, junction_edges = (legacy_app.compress_to_junction_graph(vertices, edges))
+    nodes, junction_edges = legacy_app.compress_to_junction_graph(vertices, edges)
     nodes, junction_edges = legacy_app.clean_junction_graph(nodes, junction_edges, keep_largest=True)
 
     normalized_edges = [dict(edge) for edge in junction_edges]
@@ -213,8 +222,14 @@ def _match_source_edges(legacy: LegacyGraphData, migrated: JunctionGraph, *, ato
         unused = list(legacy_records)
         for migrated_edge in migrated_records:
             migrated_polyline = _canonical_polyline(migrated_edge.polyline)
-            match_index = next((index for index, record in enumerate(unused) if
-                                record.polyline.shape == migrated_polyline.shape and np.allclose(record.polyline, migrated_polyline, rtol=0.0, atol=atol)), None)
+            match_index = next(
+                (
+                    index
+                    for index, record in enumerate(unused)
+                    if record.polyline.shape == migrated_polyline.shape and np.allclose(record.polyline, migrated_polyline, rtol=0.0, atol=atol)
+                ),
+                None,
+            )
             if match_index is None:
                 raise AssertionError(f"No legacy geometry matches migrated edge e{migrated_edge.id} at {endpoints}.")
             legacy_record = unused.pop(match_index)
@@ -259,7 +274,8 @@ def _build_request_pairs(edge_matches: Sequence[EdgeMatch], candidates: Candidat
                     skipped_equal += 1
                     continue
                 requests.append(
-                    RequestPair(legacy=(match.legacy_id, match.u, match.v, target_start, target_end), migrated=(match.migrated_id, match.u, match.v, target_start, target_end)))
+                    RequestPair(legacy=(match.legacy_id, match.u, match.v, target_start, target_end), migrated=(match.migrated_id, match.u, match.v, target_start, target_end))
+                )
 
     return requests, skipped_equal
 
@@ -277,13 +293,13 @@ def _legacy_source_polylines(graph: LegacyGraphData) -> dict[object, object]:
     return lookup
 
 
-def _normalize_path_map(raw: Mapping[WitnessRequest, object], keys: Sequence[WitnessRequest], ) -> WitnessPathMap:
+def _normalize_path_map(raw: Mapping[WitnessRequest, object], keys: Sequence[WitnessRequest]) -> WitnessPathMap:
     output: WitnessPathMap = {}
     for key in keys:
         if key not in raw:
             raise AssertionError(f"Path result omitted request {key}.")
         value = raw[key]
-        output[key] = (None if value is None else _as_xy(value))
+        output[key] = None if value is None else _as_xy(value)
 
     return output
 
@@ -315,8 +331,16 @@ def _verify_cache_count(errors: list[str], label: str, actual: int, expected: in
         errors.append(f"{label}: expected {expected:,}, got {actual:,}.")
 
 
-def _run_ordinary_verification(legacy_app: ModuleType, legacy_target: LegacyGraphData, migrated_target: JunctionGraph, requests: Sequence[RequestPair], stats: ComparisonStats, *,
-                               atol: float, example_limit: int) -> tuple[int, tuple[float, float]]:
+def _run_ordinary_verification(
+    legacy_app: ModuleType,
+    legacy_target: LegacyGraphData,
+    migrated_target: JunctionGraph,
+    requests: Sequence[RequestPair],
+    stats: ComparisonStats,
+    *,
+    atol: float,
+    example_limit: int,
+) -> tuple[int, tuple[float, float]]:
     pairs = sorted({(request.migrated[3], request.migrated[4]) for request in requests})
     legacy_path = legacy_app.make_shortest_path_polyline_fn(legacy_target.edges, legacy_target.vertices)
     migrated_finder = ShortestPathWitnessFinder(migrated_target)
@@ -342,8 +366,8 @@ def _run_ordinary_verification(legacy_app: ModuleType, legacy_target: LegacyGrap
         _compare_paths(stats, "ordinary migrated repeat", pair, migrated_first[pair], migrated_repeat[pair], atol=0.0, limit=example_limit)
         legacy_forward = legacy_first[pair]
         migrated_forward = migrated_first[pair]
-        legacy_expected = (None if legacy_forward is None else np.ascontiguousarray(legacy_forward[::-1], dtype=np.float64, ))
-        migrated_expected = (None if migrated_forward is None else np.ascontiguousarray(migrated_forward[::-1], dtype=np.float64, ))
+        legacy_expected = None if legacy_forward is None else np.ascontiguousarray(legacy_forward[::-1], dtype=np.float64)
+        migrated_expected = None if migrated_forward is None else np.ascontiguousarray(migrated_forward[::-1], dtype=np.float64)
         _compare_paths(stats, "ordinary legacy reverse", reverse, legacy_expected, legacy_reverse[reverse], atol=atol, limit=example_limit)
         _compare_paths(stats, "ordinary migrated reverse", reverse, migrated_expected, migrated_reverse[reverse], atol=atol, limit=example_limit)
         _compare_paths(stats, "ordinary reverse legacy/migrated", reverse, legacy_reverse[reverse], migrated_reverse[reverse], atol=atol, limit=example_limit)
@@ -351,12 +375,25 @@ def _run_ordinary_verification(legacy_app: ModuleType, legacy_target: LegacyGrap
     return len(pairs), (legacy_seconds, migrated_seconds)
 
 
-def _run_guided_verification(legacy_app: ModuleType, legacy_source: LegacyGraphData, legacy_target: LegacyGraphData, migrated_source: JunctionGraph, migrated_target: JunctionGraph,
-                             requests: Sequence[RequestPair], stats: ComparisonStats, cache_errors: list[str], *, rho: float, edge_samples: int, atol: float, example_limit: int)\
-        -> \
-        tuple[tuple[float, float], tuple[int, int, int, int]]:
-    legacy_finder = cast(LegacyGuidedFinder, legacy_app.make_source_guided_witness_finder(_legacy_source_polylines(legacy_source), legacy_target.edges, legacy_target.vertices, rho,
-                                                                                          edge_samples=edge_samples))
+def _run_guided_verification(
+    legacy_app: ModuleType,
+    legacy_source: LegacyGraphData,
+    legacy_target: LegacyGraphData,
+    migrated_source: JunctionGraph,
+    migrated_target: JunctionGraph,
+    requests: Sequence[RequestPair],
+    stats: ComparisonStats,
+    cache_errors: list[str],
+    *,
+    rho: float,
+    edge_samples: int,
+    atol: float,
+    example_limit: int,
+) -> tuple[tuple[float, float], tuple[int, int, int, int]]:
+    legacy_finder = cast(
+        LegacyGuidedFinder,
+        legacy_app.make_source_guided_witness_finder(_legacy_source_polylines(legacy_source), legacy_target.edges, legacy_target.vertices, rho, edge_samples=edge_samples),
+    )
     migrated_finder = SourceGuidedWitnessFinder(migrated_source, migrated_target, rho=rho, edge_samples=edge_samples)
     legacy_keys = [request.legacy for request in requests]
     migrated_keys = [request.migrated for request in requests]
@@ -373,7 +410,7 @@ def _run_guided_verification(legacy_app: ModuleType, legacy_source: LegacyGraphD
     expected_migrated_adjacencies = len({key[0] for key in migrated_keys})
     expected_legacy_trees = len({(key[0], key[3]) for key in legacy_keys})
     expected_migrated_trees = len({(key[0], key[3]) for key in migrated_keys})
-    legacy_after_first = (_timing_value(legacy_finder.timing_stats, "adjacency_builds"), _timing_value(legacy_finder.timing_stats, "dijkstra_runs"),)
+    legacy_after_first = (_timing_value(legacy_finder.timing_stats, "adjacency_builds"), _timing_value(legacy_finder.timing_stats, "dijkstra_runs"))
     migrated_after_first = (migrated_finder.timing.adjacency_builds, migrated_finder.timing.dijkstra_runs)
     _verify_cache_count(cache_errors, "legacy guided adjacency builds after first batch", legacy_after_first[0], expected_legacy_adjacencies)
     _verify_cache_count(cache_errors, "legacy guided Dijkstra runs after first batch", legacy_after_first[1], expected_legacy_trees)
@@ -405,24 +442,47 @@ def _run_guided_verification(legacy_app: ModuleType, legacy_source: LegacyGraphD
         migrated_expected = None if migrated_path is None else np.ascontiguousarray(migrated_path[::-1], dtype=np.float64)
         _compare_paths(stats, "guided legacy reverse", legacy_reverse_key, legacy_expected, legacy_reverse[legacy_reverse_key], atol=atol, limit=example_limit)
         _compare_paths(stats, "guided migrated reverse", migrated_reverse_key, migrated_expected, migrated_reverse[migrated_reverse_key], atol=atol, limit=example_limit)
-        _compare_paths(stats, "guided reverse legacy/migrated", migrated_reverse_key, legacy_reverse[legacy_reverse_key], migrated_reverse[migrated_reverse_key], atol=atol,
-                       limit=example_limit)
+        _compare_paths(
+            stats,
+            "guided reverse legacy/migrated",
+            migrated_reverse_key,
+            legacy_reverse[legacy_reverse_key],
+            migrated_reverse[migrated_reverse_key],
+            atol=atol,
+            limit=example_limit,
+        )
 
     if all_reachable:
         _verify_cache_count(cache_errors, "legacy guided Dijkstra runs after reverse", _timing_value(legacy_finder.timing_stats, "dijkstra_runs"), legacy_after_first[1])
         _verify_cache_count(cache_errors, "migrated guided Dijkstra runs after reverse", migrated_finder.timing.dijkstra_runs, migrated_after_first[1])
 
-    counts = (_timing_value(legacy_finder.timing_stats, "adjacency_builds"), _timing_value(legacy_finder.timing_stats, "dijkstra_runs"), migrated_finder.timing.adjacency_builds,
-              migrated_finder.timing.dijkstra_runs,)
+    counts = (
+        _timing_value(legacy_finder.timing_stats, "adjacency_builds"),
+        _timing_value(legacy_finder.timing_stats, "dijkstra_runs"),
+        migrated_finder.timing.adjacency_builds,
+        migrated_finder.timing.dijkstra_runs,
+    )
     return (legacy_seconds, migrated_seconds), counts
 
 
-def _verify_direction(legacy_app: ModuleType, legacy_source: LegacyGraphData, legacy_target: LegacyGraphData, migrated_source: JunctionGraph, migrated_target: JunctionGraph, *,
-                      rho: float, top_k: int, edge_samples: int, atol: float, example_limit: int, ) -> tuple[DirectionSummary, ComparisonStats, ComparisonStats, list[str],]:
+def _verify_direction(
+    legacy_app: ModuleType,
+    legacy_source: LegacyGraphData,
+    legacy_target: LegacyGraphData,
+    migrated_source: JunctionGraph,
+    migrated_target: JunctionGraph,
+    *,
+    rho: float,
+    top_k: int,
+    edge_samples: int,
+    atol: float,
+    example_limit: int,
+) -> tuple[DirectionSummary, ComparisonStats, ComparisonStats, list[str]]:
     edge_matches = _match_source_edges(legacy_source, migrated_source, atol=atol)
     source_vertices = sorted(migrated_source.vertices)
     legacy_candidates = _normalize_candidate_sets(
-        legacy_app.compute_candidate_sets_numba(legacy_source.vertices, legacy_source.nodes, legacy_target.vertices, legacy_target.edges, rho=rho, top_k=top_k))
+        legacy_app.compute_candidate_sets_numba(legacy_source.vertices, legacy_source.nodes, legacy_target.vertices, legacy_target.edges, rho=rho, top_k=top_k)
+    )
     migrated_candidates = compute_candidate_sets(migrated_source, migrated_target, rho=rho, top_k=top_k)
     candidates = _verify_candidate_membership(legacy_candidates, migrated_candidates, source_vertices)
     requests, skipped_equal = _build_request_pairs(edge_matches, candidates)
@@ -430,15 +490,35 @@ def _verify_direction(legacy_app: ModuleType, legacy_source: LegacyGraphData, le
     guided_stats = ComparisonStats()
     cache_errors: list[str] = []
 
-    ordinary_pairs, ordinary_seconds = (_run_ordinary_verification(legacy_app, legacy_target, migrated_target, requests, ordinary_stats, atol=atol, example_limit=example_limit, ))
+    ordinary_pairs, ordinary_seconds = _run_ordinary_verification(legacy_app, legacy_target, migrated_target, requests, ordinary_stats, atol=atol, example_limit=example_limit)
 
-    guided_seconds, cache_counts = (
-        _run_guided_verification(legacy_app, legacy_source, legacy_target, migrated_source, migrated_target, requests, guided_stats, cache_errors, rho=rho,
-                                 edge_samples=edge_samples, atol=atol, example_limit=example_limit, ))
-    summary = DirectionSummary(source_edges=len(edge_matches), requests=len(requests), skipped_equal_pairs=skipped_equal, ordinary_pairs=ordinary_pairs,
-                               ordinary_seconds=ordinary_seconds, guided_seconds=guided_seconds, legacy_adjacency_builds=cache_counts[0], legacy_dijkstra_runs=cache_counts[1],
-                               migrated_adjacency_builds=cache_counts[2], migrated_dijkstra_runs=cache_counts[3])
-    return summary, ordinary_stats, guided_stats, cache_errors,
+    guided_seconds, cache_counts = _run_guided_verification(
+        legacy_app,
+        legacy_source,
+        legacy_target,
+        migrated_source,
+        migrated_target,
+        requests,
+        guided_stats,
+        cache_errors,
+        rho=rho,
+        edge_samples=edge_samples,
+        atol=atol,
+        example_limit=example_limit,
+    )
+    summary = DirectionSummary(
+        source_edges=len(edge_matches),
+        requests=len(requests),
+        skipped_equal_pairs=skipped_equal,
+        ordinary_pairs=ordinary_pairs,
+        ordinary_seconds=ordinary_seconds,
+        guided_seconds=guided_seconds,
+        legacy_adjacency_builds=cache_counts[0],
+        legacy_dijkstra_runs=cache_counts[1],
+        migrated_adjacency_builds=cache_counts[2],
+        migrated_dijkstra_runs=cache_counts[3],
+    )
+    return summary, ordinary_stats, guided_stats, cache_errors
 
 
 def main() -> int:
@@ -470,7 +550,7 @@ def main() -> int:
             parser.error(f"Graph file does not exist: {path}")
 
     legacy_app = _load_legacy_app(args.legacy_root)
-    legacy_graphs = {path: _load_legacy_graph(legacy_app, path, ) for path in graph_paths}
+    legacy_graphs = {path: _load_legacy_graph(legacy_app, path) for path in graph_paths}
     migrated_graphs = {path: load_junction_graph(path) for path in graph_paths}
 
     failures = 0
@@ -478,24 +558,39 @@ def main() -> int:
     for source_path, target_path in directions:
         label = f"{source_path.stem} -> {target_path.stem}"
         try:
-            (summary, ordinary_stats, guided_stats, cache_errors,) = _verify_direction(legacy_app, legacy_graphs[source_path], legacy_graphs[target_path],
-                                                                                       migrated_graphs[source_path], migrated_graphs[target_path], rho=args.rho, top_k=args.top_k,
-                                                                                       edge_samples=args.edge_samples, atol=args.atol, example_limit=args.max_differences)
+            summary, ordinary_stats, guided_stats, cache_errors = _verify_direction(
+                legacy_app,
+                legacy_graphs[source_path],
+                legacy_graphs[target_path],
+                migrated_graphs[source_path],
+                migrated_graphs[target_path],
+                rho=args.rho,
+                top_k=args.top_k,
+                edge_samples=args.edge_samples,
+                atol=args.atol,
+                example_limit=args.max_differences,
+            )
         except Exception as exc:
             failures += 1
             print(f"FAIL  {label}")
             print(f"      {type(exc).__name__}: {exc}")
             continue
 
-        status = ("PASS" if guided_stats.mismatches == 0 and not cache_errors else "FAIL")
+        status = "PASS" if guided_stats.mismatches == 0 and not cache_errors else "FAIL"
         failures += status == "FAIL"
         print(f"{status}  {label}: rho={args.rho:g}, top_k={args.top_k}, edge_samples={args.edge_samples}")
-        print(f"      source edges={summary.source_edges:,}, guided requests={summary.requests:,}, "
-              f"skipped equal-endpoint pairs={summary.skipped_equal_pairs:,}, ordinary target pairs={summary.ordinary_pairs:,}")
-        print(f"      ordinary legacy={summary.ordinary_seconds[0]:.3f} s, migrated={summary.ordinary_seconds[1]:.3f} s; "
-              f"guided legacy={summary.guided_seconds[0]:.3f} s, migrated={summary.guided_seconds[1]:.3f} s")
-        print(f"      guided cache counts: legacy adjacency={summary.legacy_adjacency_builds:,}, Dijkstra={summary.legacy_dijkstra_runs:,}; "
-              f"migrated adjacency={summary.migrated_adjacency_builds:,}, Dijkstra={summary.migrated_dijkstra_runs:,}")
+        print(
+            f"      source edges={summary.source_edges:,}, guided requests={summary.requests:,}, "
+            f"skipped equal-endpoint pairs={summary.skipped_equal_pairs:,}, ordinary target pairs={summary.ordinary_pairs:,}"
+        )
+        print(
+            f"      ordinary legacy={summary.ordinary_seconds[0]:.3f} s, migrated={summary.ordinary_seconds[1]:.3f} s; "
+            f"guided legacy={summary.guided_seconds[0]:.3f} s, migrated={summary.guided_seconds[1]:.3f} s"
+        )
+        print(
+            f"      guided cache counts: legacy adjacency={summary.legacy_adjacency_builds:,}, Dijkstra={summary.legacy_dijkstra_runs:,}; "
+            f"migrated adjacency={summary.migrated_adjacency_builds:,}, Dijkstra={summary.migrated_dijkstra_runs:,}"
+        )
         print(f"      ordinary geometry comparisons={ordinary_stats.total:,}, legacy/migrated differences={ordinary_stats.mismatches:,}")
         print(f"      guided path comparisons={guided_stats.total:,}, mismatches={guided_stats.mismatches:,}, cache errors={len(cache_errors):,}")
 
@@ -511,8 +606,10 @@ def main() -> int:
         print(f"\n{failures} of {len(directions)} directions failed witness equivalence.")
         return 1
 
-    print("\nBoth graph directions matched legacy source-guided witness geometry, determinism, reverse behavior and cache counts. "
-          "Ordinary legacy reconstruction differences were reported separately.")
+    print(
+        "\nBoth graph directions matched legacy source-guided witness geometry, determinism, reverse behavior and cache counts. "
+        "Ordinary legacy reconstruction differences were reported separately."
+    )
     return 0
 
 

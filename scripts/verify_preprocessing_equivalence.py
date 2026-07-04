@@ -23,6 +23,7 @@ type LegacyEdge = Mapping[str, Any]
 
 class LegacyGraphData(Protocol):
     """Structural type for river_graph_matcher_app_v6.GraphData."""
+
     vertices: Mapping[int, tuple[float, float]]
     nodes: set[int]
     edges: Sequence[LegacyEdge]
@@ -107,7 +108,7 @@ def geometry_sort_key(record: EdgeGeometry) -> tuple:
     length, polyline = record
     rounded = tuple(float(value) for value in np.round(polyline.ravel(), 12))
 
-    return round(length, 12), len(polyline), rounded,
+    return round(length, 12), len(polyline), rounded
 
 
 def legacy_edge_groups(graph: LegacyGraphData) -> dict[tuple[int, int], list[EdgeGeometry]]:
@@ -147,7 +148,7 @@ def migrated_edge_groups(graph: JunctionGraph) -> dict[tuple[int, int], list[Edg
     return dict(groups)
 
 
-def compare_coordinates(legacy_graph: LegacyGraphData, migrated_graph: JunctionGraph, *, atol: float, ) -> None:
+def compare_coordinates(legacy_graph: LegacyGraphData, migrated_graph: JunctionGraph, *, atol: float) -> None:
     legacy_nodes = {int(vertex) for vertex in legacy_graph.nodes}
     migrated_nodes = set(migrated_graph.vertices)
 
@@ -165,19 +166,22 @@ def compare_coordinates(legacy_graph: LegacyGraphData, migrated_graph: JunctionG
             raise AssertionError(f"Coordinates differ at vertex {vertex}: legacy={legacy_xy.tolist()}, migrated={migrated_xy.tolist()}.")
 
 
-def compare_endpoint_multiplicities(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]], ) -> None:
+def compare_endpoint_multiplicities(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]]) -> None:
     legacy_counts = Counter({endpoints: len(records) for endpoints, records in legacy_groups.items()})
     migrated_counts = Counter({endpoints: len(records) for endpoints, records in migrated_groups.items()})
 
     if legacy_counts != migrated_counts:
         all_endpoints = sorted(set(legacy_counts) | set(migrated_counts))
-        differences = [(endpoints, legacy_counts.get(endpoints, 0), migrated_counts.get(endpoints, 0),) for endpoints in all_endpoints if
-                       legacy_counts.get(endpoints, 0) != migrated_counts.get(endpoints, 0)]
+        differences = [
+            (endpoints, legacy_counts.get(endpoints, 0), migrated_counts.get(endpoints, 0))
+            for endpoints in all_endpoints
+            if legacy_counts.get(endpoints, 0) != migrated_counts.get(endpoints, 0)
+        ]
 
         raise AssertionError(f"Endpoint multiplicities differ (endpoints, legacy, migrated): {differences}.")
 
 
-def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]], *, atol: float, ) -> None:
+def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry]], migrated_groups: dict[tuple[int, int], list[EdgeGeometry]], *, atol: float) -> None:
     for endpoints in sorted(legacy_groups):
         legacy_records = legacy_groups[endpoints]
         migrated_records = migrated_groups[endpoints]
@@ -186,27 +190,28 @@ def compare_edge_geometry(legacy_groups: dict[tuple[int, int], list[EdgeGeometry
             legacy_length, legacy_polyline = legacy_record
             migrated_length, migrated_polyline = migrated_record
 
-            if not np.isclose(legacy_length, migrated_length, rtol=0.0, atol=atol, ):
+            if not np.isclose(legacy_length, migrated_length, rtol=0.0, atol=atol):
                 raise AssertionError(f"Edge length differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_length:.17g}, migrated={migrated_length:.17g}.")
 
             if legacy_polyline.shape != migrated_polyline.shape:
                 raise AssertionError(
-                    f"Polyline shape differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_polyline.shape}, migrated={migrated_polyline.shape}.")
+                    f"Polyline shape differs for {endpoints}, parallel index {parallel_index}: legacy={legacy_polyline.shape}, migrated={migrated_polyline.shape}."
+                )
 
-            if not np.allclose(legacy_polyline, migrated_polyline, rtol=0.0, atol=atol, ):
+            if not np.allclose(legacy_polyline, migrated_polyline, rtol=0.0, atol=atol):
                 maximum_error = float(np.max(np.abs(legacy_polyline - migrated_polyline)))
 
                 raise AssertionError(f"Polyline geometry differs for {endpoints}, parallel index {parallel_index}; maximum absolute error {maximum_error:.3e}.")
 
 
-def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) -> tuple[int, int, int]:
+def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float) -> tuple[int, int, int]:
     """Compare one production graph after complete legacy and migrated preprocessing."""
     graph_path = graph_path.resolve()
 
     if not graph_path.is_file():
         raise FileNotFoundError(f"Graph file does not exist: {graph_path}")
 
-    legacy_graph = cast(LegacyGraphData, legacy_app.preprocess_graph_file(graph_path), )
+    legacy_graph = cast(LegacyGraphData, legacy_app.preprocess_graph_file(graph_path))
     migrated_graph = load_junction_graph(graph_path)
 
     if migrated_graph.name != graph_path.stem:
@@ -218,19 +223,18 @@ def compare_graph(legacy_app: ModuleType, graph_path: Path, *, atol: float, ) ->
     migrated_groups = migrated_edge_groups(migrated_graph)
 
     compare_endpoint_multiplicities(legacy_groups, migrated_groups)
-    compare_edge_geometry(legacy_groups, migrated_groups, atol=atol, )
+    compare_edge_geometry(legacy_groups, migrated_groups, atol=atol)
 
     parallel_groups = sum(len(records) > 1 for records in migrated_groups.values())
 
-    return len(migrated_graph.vertices), len(migrated_graph.edges), parallel_groups,
+    return len(migrated_graph.vertices), len(migrated_graph.edges), parallel_groups
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=("Compare the migrated preprocessing pipeline with the exact "
-                                                  "legacy v6 preprocessing implementation."))
-    parser.add_argument("--legacy-root", type=Path, required=True, help="Folder containing river_graph_matcher_app_v6.py and its sibling modules.", )
-    parser.add_argument("--atol", type=float, default=1e-12, help="Absolute tolerance for coordinates, lengths and polyline geometry.", )
-    parser.add_argument("graphs", type=Path, nargs="+", help="TopoTide graph files to compare.", )
+    parser = argparse.ArgumentParser(description=("Compare the migrated preprocessing pipeline with the exact " "legacy v6 preprocessing implementation."))
+    parser.add_argument("--legacy-root", type=Path, required=True, help="Folder containing river_graph_matcher_app_v6.py and its sibling modules.")
+    parser.add_argument("--atol", type=float, default=1e-12, help="Absolute tolerance for coordinates, lengths and polyline geometry.")
+    parser.add_argument("graphs", type=Path, nargs="+", help="TopoTide graph files to compare.")
     args = parser.parse_args()
 
     if args.atol < 0.0 or not np.isfinite(args.atol):
@@ -241,7 +245,7 @@ def main() -> int:
 
     for graph_path in args.graphs:
         try:
-            vertex_count, edge_count, parallel_groups = compare_graph(legacy_app, graph_path, atol=args.atol, )
+            vertex_count, edge_count, parallel_groups = compare_graph(legacy_app, graph_path, atol=args.atol)
         except Exception as exc:
             failures.append((graph_path, f"{type(exc).__name__}: {exc}"))
             print(f"FAIL  {graph_path}")

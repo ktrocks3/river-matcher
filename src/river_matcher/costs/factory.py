@@ -15,10 +15,15 @@ from river_matcher.models import JunctionGraph
 
 type CostConstructor = Callable[..., BaseEdgeCost]
 
-_COST_TYPES: dict[CostName, CostConstructor] = {CostName.RELATIVE_LENGTH_ERROR: RelativeLengthError, CostName.LOG_LENGTH_DISTORTION: LogLengthDistortion,
-                                                CostName.MEAN_DISTANCE_TANGENT: MeanDistanceTangent, CostName.HAUSDORFF_DISTANCE: HausdorffDistance,
-                                                CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE: SymmetricCorridorExceedance, CostName.DISCRETE_FRECHET_DISTANCE: DiscreteFrechetDistance,
-                                                CostName.DYNAMIC_TIME_WARPING_DISTANCE: DynamicTimeWarpingDistance,}
+_COST_TYPES: dict[CostName, CostConstructor] = {
+    CostName.RELATIVE_LENGTH_ERROR: RelativeLengthError,
+    CostName.LOG_LENGTH_DISTORTION: LogLengthDistortion,
+    CostName.MEAN_DISTANCE_TANGENT: MeanDistanceTangent,
+    CostName.HAUSDORFF_DISTANCE: HausdorffDistance,
+    CostName.SYMMETRIC_CORRIDOR_EXCEEDANCE: SymmetricCorridorExceedance,
+    CostName.DISCRETE_FRECHET_DISTANCE: DiscreteFrechetDistance,
+    CostName.DYNAMIC_TIME_WARPING_DISTANCE: DynamicTimeWarpingDistance,
+}
 
 
 def available_costs() -> tuple[CostName, ...]:
@@ -26,14 +31,14 @@ def available_costs() -> tuple[CostName, ...]:
 
 
 def create_cost(name: CostName | str, source: JunctionGraph, target: JunctionGraph, **options: Any) -> BaseEdgeCost:
-    """ Construct one standalone cost.
-        Use CostFactory directly when several costs should share witness caches."""
+    """Construct one standalone cost.
+    Use CostFactory directly when several costs should share witness caches."""
     return CostFactory(source, target).create(name, **options)
 
 
 class CostFactory:
-    """ Construct edge costs while sharing graph-dependent path resources.
-        Reusing one factory across experiments prevents each cost object from independently rebuilding identical target shortest-path structures."""
+    """Construct edge costs while sharing graph-dependent path resources.
+    Reusing one factory across experiments prevents each cost object from independently rebuilding identical target shortest-path structures."""
 
     def __init__(self, source: JunctionGraph, target: JunctionGraph) -> None:
         self.resources = CostResources(source, target)

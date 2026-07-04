@@ -17,14 +17,14 @@ _TANGENT_NORM_TOLERANCE = 1e-12
 _DOT_ALIGNMENT_TOLERANCE = 1e-12
 
 
-def _sampled_unit_tangents(points: XYArray, ) -> XYArray | None:
-    """ Estimate orientation-consistent tangents from equally spaced samples.
-        Interior tangents bisect the adjacent sampled-segment directions. This avoids choosing an arbitrary incoming or outgoing segment at a vertex."""
+def _sampled_unit_tangents(points: XYArray) -> XYArray | None:
+    """Estimate orientation-consistent tangents from equally spaced samples.
+    Interior tangents bisect the adjacent sampled-segment directions. This avoids choosing an arbitrary incoming or outgoing segment at a vertex."""
     if len(points) < 2:
         return None
 
     intervals = np.diff(points, axis=0)
-    interval_lengths = np.linalg.norm(intervals, axis=1, )
+    interval_lengths = np.linalg.norm(intervals, axis=1)
     if not np.all(np.isfinite(interval_lengths)) or np.any(interval_lengths <= _TANGENT_TOLERANCE):
         return None
 
@@ -34,20 +34,21 @@ def _sampled_unit_tangents(points: XYArray, ) -> XYArray | None:
     tangents[-1] = unit_intervals[-1]
 
     if len(points) > 2:
-        interior = (unit_intervals[:-1] + unit_intervals[1:])
-        interior_lengths = np.linalg.norm(interior, axis=1, )
+        interior = unit_intervals[:-1] + unit_intervals[1:]
+        interior_lengths = np.linalg.norm(interior, axis=1)
         regular = interior_lengths > _TANGENT_TOLERANCE
         interior[regular] /= interior_lengths[regular, None]
 
         # At a complete reversal the bisector is undefined. Either adjacent direction is equivalent because the metric uses an absolute dot.
         interior[~regular] = unit_intervals[1:][~regular]
         tangents[1:-1] = interior
-    return np.ascontiguousarray(tangents, dtype=np.float64, )
+    return np.ascontiguousarray(tangents, dtype=np.float64)
 
 
 @njit(cache=True, fastmath=False)
-def _directed_mean_distance_tangent(sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray,
-                                    tangent_weight: float, ) -> float:
+def _directed_mean_distance_tangent(
+    sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray, tangent_weight: float
+) -> float:
     """
     Compare sampled points and tangents against a target polyline.
 
@@ -100,7 +101,7 @@ def _directed_mean_distance_tangent(sample_points: XYArray, sample_tangents: XYA
         if best_segment < 0:
             return math.inf
 
-        target_tx, target_ty = (_target_tangent_at_projection(segment_vectors, segment_squared_lengths, best_segment, best_projection, ))
+        target_tx, target_ty = _target_tangent_at_projection(segment_vectors, segment_squared_lengths, best_segment, best_projection)
         tangent_dot = abs(sample_tx * target_tx + sample_ty * target_ty)
         if tangent_dot >= 1.0 - _DOT_ALIGNMENT_TOLERANCE:
             angular_error = 0.0
@@ -108,13 +109,13 @@ def _directed_mean_distance_tangent(sample_points: XYArray, sample_tangents: XYA
             if tangent_dot > 1.0:
                 tangent_dot = 1.0
             angular_error = math.acos(tangent_dot) / (0.5 * math.pi)
-        total += (math.sqrt(best_squared_distance) + tangent_weight * angular_error)
+        total += math.sqrt(best_squared_distance) + tangent_weight * angular_error
 
     return total / sample_count
 
 
 @njit(cache=True, fastmath=False)
-def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_lengths: np.ndarray, segment_index: int, projection: float, ) -> tuple[float, float]:
+def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_lengths: np.ndarray, segment_index: int, projection: float) -> tuple[float, float]:
     """
     Return the local target tangent at a projected point.
 
@@ -122,8 +123,8 @@ def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_leng
     of the incoming and outgoing segment directions.
     """
     current_length = math.sqrt(segment_squared_lengths[segment_index])
-    current_x = (segment_vectors[segment_index, 0] / current_length)
-    current_y = (segment_vectors[segment_index, 1] / current_length)
+    current_x = segment_vectors[segment_index, 0] / current_length
+    current_y = segment_vectors[segment_index, 1] / current_length
 
     tangent_x = current_x
     tangent_y = current_y
@@ -131,13 +132,13 @@ def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_leng
     if projection <= _VERTEX_PROJECTION_TOLERANCE and segment_index > 0:
         adjacent_index = segment_index - 1
         adjacent_length = math.sqrt(segment_squared_lengths[adjacent_index])
-        tangent_x += (segment_vectors[adjacent_index, 0] / adjacent_length)
-        tangent_y += (segment_vectors[adjacent_index, 1] / adjacent_length)
+        tangent_x += segment_vectors[adjacent_index, 0] / adjacent_length
+        tangent_y += segment_vectors[adjacent_index, 1] / adjacent_length
     elif projection >= 1.0 - _VERTEX_PROJECTION_TOLERANCE and segment_index + 1 < segment_vectors.shape[0]:
         adjacent_index = segment_index + 1
         adjacent_length = math.sqrt(segment_squared_lengths[adjacent_index])
-        tangent_x += (segment_vectors[adjacent_index, 0] / adjacent_length)
-        tangent_y += (segment_vectors[adjacent_index, 1] / adjacent_length)
+        tangent_x += segment_vectors[adjacent_index, 0] / adjacent_length
+        tangent_y += segment_vectors[adjacent_index, 1] / adjacent_length
 
     tangent_length = math.sqrt(tangent_x * tangent_x + tangent_y * tangent_y)
 
@@ -145,7 +146,7 @@ def _target_tangent_at_projection(segment_vectors: XYArray, segment_squared_leng
     if tangent_length <= _TANGENT_NORM_TOLERANCE:
         return current_x, current_y
 
-    return tangent_x / tangent_length, tangent_y / tangent_length,
+    return tangent_x / tangent_length, tangent_y / tangent_length
 
 
 class MeanDistanceTangent(BaseEdgeCost):
@@ -159,7 +160,7 @@ class MeanDistanceTangent(BaseEdgeCost):
     name = CostName.MEAN_DISTANCE_TANGENT
     label = "symmetric mean distance and tangent error"
 
-    def __init__(self, resources: CostResources, *, rho: float = 10.0, edge_samples: int = 12, curve_samples: int = 64, tangent_weight: float = 1.0, ) -> None:
+    def __init__(self, resources: CostResources, *, rho: float = 10.0, edge_samples: int = 12, curve_samples: int = 64, tangent_weight: float = 1.0) -> None:
         super().__init__(resources)
 
         resolved_curve_samples = int(curve_samples)
@@ -176,13 +177,13 @@ class MeanDistanceTangent(BaseEdgeCost):
         self.curve_samples = resolved_curve_samples
         self.tangent_weight = resolved_tangent_weight
 
-        self._finder: SourceGuidedWitnessFinder = (resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples, ))
+        self._finder: SourceGuidedWitnessFinder = resources.guided_paths(rho=self.rho, edge_samples=self.edge_samples)
 
-        self._source_sample_cache: dict[int, SampledCurve | None,] = {}
-        self._source_prepared_cache: dict[int, PreparedPolyline | None,] = {}
+        self._source_sample_cache: dict[int, SampledCurve | None] = {}
+        self._source_prepared_cache: dict[int, PreparedPolyline | None] = {}
 
-    def _sample_curve(self, polyline: XYArray, ) -> SampledCurve | None:
-        points = sample_polyline_by_arclength(polyline, self.curve_samples, )
+    def _sample_curve(self, polyline: XYArray) -> SampledCurve | None:
+        points = sample_polyline_by_arclength(polyline, self.curve_samples)
 
         if points is None:
             return None
@@ -194,28 +195,28 @@ class MeanDistanceTangent(BaseEdgeCost):
 
         return points, tangents
 
-    def _source_samples(self, edge_id: int, ) -> SampledCurve | None:
+    def _source_samples(self, edge_id: int) -> SampledCurve | None:
         if edge_id not in self._source_sample_cache:
             edge = self._source_edges[edge_id]
-            self._source_sample_cache[edge_id] = (self._sample_curve(edge.polyline))
+            self._source_sample_cache[edge_id] = self._sample_curve(edge.polyline)
 
         return self._source_sample_cache[edge_id]
 
-    def _source_prepared(self, edge_id: int, ) -> PreparedPolyline | None:
+    def _source_prepared(self, edge_id: int) -> PreparedPolyline | None:
         if edge_id not in self._source_prepared_cache:
             edge = self._source_edges[edge_id]
-            self._source_prepared_cache[edge_id] = (prepare_polyline_segments(edge.polyline))
+            self._source_prepared_cache[edge_id] = prepare_polyline_segments(edge.polyline)
 
         return self._source_prepared_cache[edge_id]
 
-    def _compute(self, request: CostRequest, ) -> float:
+    def _compute(self, request: CostRequest) -> float:
         edge = self._source_edge(request)
 
         if edge is None or not self._valid_target_pair(request):
             return math.inf
 
         edge_id, source_u, source_v, target_u, target_v = request
-        witness = self._finder.path(edge_id, source_u, source_v, target_u, target_v, )
+        witness = self._finder.path(edge_id, source_u, source_v, target_u, target_v)
         self._remember_witness(request, witness)
 
         if witness is None:
@@ -235,15 +236,15 @@ class MeanDistanceTangent(BaseEdgeCost):
         witness_starts, witness_vectors, witness_squared = witness_prepared
         source_starts, source_vectors, source_squared = source_prepared
 
-        source_to_witness = _directed_mean_distance_tangent(source_points, source_tangents, witness_starts, witness_vectors, witness_squared, self.tangent_weight, )
-        witness_to_source = _directed_mean_distance_tangent(witness_points, witness_tangents, source_starts, source_vectors, source_squared, self.tangent_weight, )
+        source_to_witness = _directed_mean_distance_tangent(source_points, source_tangents, witness_starts, witness_vectors, witness_squared, self.tangent_weight)
+        witness_to_source = _directed_mean_distance_tangent(witness_points, witness_tangents, source_starts, source_vectors, source_squared, self.tangent_weight)
 
         if not math.isfinite(source_to_witness) or not math.isfinite(witness_to_source):
             return math.inf
 
         return 0.5 * (source_to_witness + witness_to_source)
 
-    def _compute_witness(self, request: CostRequest, ) -> XYArray | None:
+    def _compute_witness(self, request: CostRequest) -> XYArray | None:
         return self._finder.path(*request)
 
     def clear_cache(self) -> None:

@@ -28,7 +28,7 @@ def _clean_polyline(polyline: XYArray) -> tuple[XYArray, float]:
     try:
         points = np.asarray(polyline, dtype=np.float64)
     except (TypeError, ValueError) as exc:
-        raise ValueError('A polyline must contain numeric coordinates') from exc
+        raise ValueError("A polyline must contain numeric coordinates") from exc
     if points.ndim != 2 or points.shape[1] != 2 or len(points) < 2:
         raise ValueError(f"A polyline must have shape (n, 2) with n >= 2, got {points.shape}.")
     if not np.all(np.isfinite(points)):
@@ -142,6 +142,7 @@ class JunctionGraph:
 @dataclass(frozen=True, slots=True, eq=False)
 class MatchResult:
     """Phi: The result of one additive or bottleneck matching run"""
+
     objective: Objective
     feasible: bool
     value: float

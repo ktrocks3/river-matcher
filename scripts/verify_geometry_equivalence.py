@@ -70,8 +70,14 @@ def _load_legacy_backend(legacy_root: Path) -> ModuleType:
     finally:
         sys.path.remove(str(legacy_root))
 
-    required = ("_sample_polyline_points_by_arclength", "_sample_polyline_with_tangents", "_prepare_polyline_segments", "_point_to_prepared_polyline_distance",
-                "_point_to_prepared_polyline_distances", "_closest_segment_distance_and_tangent")
+    required = (
+        "_sample_polyline_points_by_arclength",
+        "_sample_polyline_with_tangents",
+        "_prepare_polyline_segments",
+        "_point_to_prepared_polyline_distance",
+        "_point_to_prepared_polyline_distances",
+        "_closest_segment_distance_and_tangent",
+    )
 
     missing = [name for name in required if not callable(getattr(module, name, None))]
 
@@ -150,8 +156,8 @@ def _compare_sampling(legacy: ModuleType, polyline: FloatArray, sample_counts: t
         error = _array_error(migrated_points, legacy_points, label=label, atol=atol)
         stats.max_sample_error = max(stats.max_sample_error, error)
 
-        migrated_points, migrated_tangents = (sample_polyline_with_tangents(polyline, samples))
-        legacy_points, legacy_tangents = (legacy_sample_tangents(polyline, samples))
+        migrated_points, migrated_tangents = sample_polyline_with_tangents(polyline, samples)
+        legacy_points, legacy_tangents = legacy_sample_tangents(polyline, samples)
 
         point_error = _array_error(migrated_points, legacy_points, label=f"{label} with tangents", atol=atol)
         tangent_error = _array_error(migrated_tangents, legacy_tangents, label=f"{label} tangents", atol=atol)
@@ -179,18 +185,19 @@ def _compare_distances(legacy: ModuleType, polyline: FloatArray, queries: FloatA
     legacy_scalar_values = np.empty(len(queries), dtype=np.float64)
 
     for query_index, point in enumerate(queries):
-        migrated_distance = (point_to_prepared_polyline_distance(point, migrated_prepared))
+        migrated_distance = point_to_prepared_polyline_distance(point, migrated_prepared)
         legacy_distance = float(legacy_scalar(point, legacy_prepared))
         legacy_scalar_values[query_index] = legacy_distance
 
         error = _scalar_error(migrated_distance, legacy_distance, label=f"{graph_name} edge e{edge_id} scalar distance query {query_index}", atol=atol)
         stats.max_scalar_distance_error = max(stats.max_scalar_distance_error, error)
 
-        migrated_closest_distance, migrated_tangent = (closest_segment_distance_and_tangent(point, polyline))
-        legacy_closest_distance, legacy_tangent = (legacy_closest(point, polyline))
+        migrated_closest_distance, migrated_tangent = closest_segment_distance_and_tangent(point, polyline)
+        legacy_closest_distance, legacy_tangent = legacy_closest(point, polyline)
 
-        distance_error = _scalar_error(migrated_closest_distance, float(legacy_closest_distance), label=f"{graph_name} edge e{edge_id} closest distance query {query_index}",
-                                       atol=atol)
+        distance_error = _scalar_error(
+            migrated_closest_distance, float(legacy_closest_distance), label=f"{graph_name} edge e{edge_id} closest distance query {query_index}", atol=atol
+        )
         tangent_error = _array_error(migrated_tangent, legacy_tangent, label=f"{graph_name} edge e{edge_id} closest tangent query {query_index}", atol=atol)
 
         stats.max_closest_distance_error = max(stats.max_closest_distance_error, distance_error)
@@ -223,10 +230,12 @@ def _verify_graph(legacy: ModuleType, graph_path: Path, *, sample_counts: tuple[
 
 
 def _format_stats(graph_name: str, stats: VerificationStats) -> str:
-    return (f"PASS  {graph_name}: edges={stats.edges:,}, sampling cases={stats.sampling_cases:,}, distance queries={stats.query_points:,}\n"
-            f"      max sample error={stats.max_sample_error:.3e}, max sampled-tangent error={stats.max_sample_tangent_error:.3e}\n"
-            f"      max scalar-distance error={stats.max_scalar_distance_error:.3e}, max batch-distance error={stats.max_batch_distance_error:.3e}\n"
-            f"      max closest-distance error={stats.max_closest_distance_error:.3e}, max closest-tangent error={stats.max_closest_tangent_error:.3e}")
+    return (
+        f"PASS  {graph_name}: edges={stats.edges:,}, sampling cases={stats.sampling_cases:,}, distance queries={stats.query_points:,}\n"
+        f"      max sample error={stats.max_sample_error:.3e}, max sampled-tangent error={stats.max_sample_tangent_error:.3e}\n"
+        f"      max scalar-distance error={stats.max_scalar_distance_error:.3e}, max batch-distance error={stats.max_batch_distance_error:.3e}\n"
+        f"      max closest-distance error={stats.max_closest_distance_error:.3e}, max closest-tangent error={stats.max_closest_tangent_error:.3e}"
+    )
 
 
 def main() -> int:

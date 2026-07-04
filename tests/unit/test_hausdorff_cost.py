@@ -16,11 +16,14 @@ def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -
 
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:
-    source = JunctionGraph(name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0), },
-                           edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]),))
-    target = JunctionGraph(name="target", coordinates={10: (0.0, 1.0), 20: (2.0, 1.0), 30: (0.0, 0.0), 40: (1.0, 1.0), 50: (2.0, 0.0), },
-                           edges=(make_edge(10, 10, 20, [(0.0, 1.0), (2.0, 1.0)]), make_edge(11, 30, 40, [(0.0, 0.0), (1.0, 1.0)]),
-                                  make_edge(12, 40, 50, [(1.0, 1.0), (2.0, 0.0)]),))
+    source = JunctionGraph(
+        name="source", coordinates={1: (0.0, 0.0), 2: (2.0, 0.0)}, edges=(make_edge(0, 1, 2, [(0.0, 0.0), (2.0, 0.0)]), make_edge(1, 1, 2, [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+    )
+    target = JunctionGraph(
+        name="target",
+        coordinates={10: (0.0, 1.0), 20: (2.0, 1.0), 30: (0.0, 0.0), 40: (1.0, 1.0), 50: (2.0, 0.0)},
+        edges=(make_edge(10, 10, 20, [(0.0, 1.0), (2.0, 1.0)]), make_edge(11, 30, 40, [(0.0, 0.0), (1.0, 1.0)]), make_edge(12, 40, 50, [(1.0, 1.0), (2.0, 0.0)])),
+    )
 
     return source, target
 
@@ -137,7 +140,7 @@ def test_batch_preserves_request_order() -> None:
 
 def test_repeated_requests_use_cost_and_witness_caches() -> None:
     cost = make_cost()
-    cost_request: CostRequest = (1, 1, 2, 30, 50,)
+    cost_request: CostRequest = (1, 1, 2, 30, 50)
 
     first = cost(*cost_request)
     first_witness = cost.witness(*cost_request)

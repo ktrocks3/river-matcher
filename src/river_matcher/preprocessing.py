@@ -45,8 +45,8 @@ def _clean_raw_polyline(path: object) -> XYArray | None:
 
 
 def filter_raw_graph(vertices: RawVertices, edges: Iterable[RawEdge], *, invalid_vertex_marker: tuple[float, float] = (-1.0, -1.0)):
-    """ Remove unusable raw vertices and edges. A retained edge must: 1. have two different endpoints; 2.  refer to retained vertices;
-            3 have a finite positive-length coordinate polyline. """
+    """Remove unusable raw vertices and edges. A retained edge must: 1. have two different endpoints; 2.  refer to retained vertices;
+    3 have a finite positive-length coordinate polyline."""
     marker = (float(invalid_vertex_marker[0]), float(invalid_vertex_marker[1]))
     valid_vertices: RawVertices = {}
 
@@ -69,7 +69,7 @@ def filter_raw_graph(vertices: RawVertices, edges: Iterable[RawEdge], *, invalid
     valid_edges: RawEdges = []
     for raw_edge in edges:
         try:
-            edge_id, u, v, delta = int(raw_edge['id']), int(raw_edge['u']), int(raw_edge['v']), float(raw_edge['delta'])
+            edge_id, u, v, delta = int(raw_edge["id"]), int(raw_edge["u"]), int(raw_edge["v"]), float(raw_edge["delta"])
         except (KeyError, ValueError, TypeError):
             continue
 
@@ -87,7 +87,7 @@ def _build_adjacency(vertices: RawVertices, edges: RawEdges) -> Adjacency:
     adjacency: Adjacency = {int(vertex): [] for vertex in vertices}
 
     for edge_index, edge in enumerate(edges):
-        u, v = int(edge['u']), int(edge['v'])
+        u, v = int(edge["u"]), int(edge["v"])
         adjacency[u].append((v, edge_index))
         adjacency[v].append((u, edge_index))
 
@@ -124,8 +124,8 @@ def _connected_components(adjacency: Adjacency) -> list[set[int]]:
 
 
 def _junction_vertices(adjacency: Adjacency) -> set[int]:
-    """ Select vertices retained after degree-2 suppression. A component consisting entirely of degree-2 vertices is a cycle. Two deterministic anchor vertices are retained
-    so the cycle becomes two parallel junction edges rather than disappearing. """
+    """Select vertices retained after degree-2 suppression. A component consisting entirely of degree-2 vertices is a cycle. Two deterministic anchor vertices are retained
+    so the cycle becomes two parallel junction edges rather than disappearing."""
     junctions = {vertex for vertex, incident_edges in adjacency.items() if len(incident_edges) != 2}
     for component in _connected_components(adjacency):
         if len(component) < 2:
@@ -151,8 +151,13 @@ def _canonicalize_compressed_edge(u: int, v: int, polyline: XYArray, raw_edge_id
     """Give an undirected compressed edge a deterministic orientation"""
     if u <= v:
         return {"u": u, "v": v, "polyline": polyline, "raw_edge_ids": tuple(raw_edge_ids), "chain_vertices": tuple(chain_vertices)}
-    return {"u": v, "v": u, "polyline": np.ascontiguousarray(polyline[::-1], dtype=np.float64), "raw_edge_ids": tuple(reversed(raw_edge_ids)),
-            "chain_vertices": tuple(reversed(chain_vertices))}
+    return {
+        "u": v,
+        "v": u,
+        "polyline": np.ascontiguousarray(polyline[::-1], dtype=np.float64),
+        "raw_edge_ids": tuple(reversed(raw_edge_ids)),
+        "chain_vertices": tuple(reversed(chain_vertices)),
+    }
 
 
 def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[set[int], list[CompressedEdge]]:
@@ -168,7 +173,7 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 continue
 
             edge = edges[edge_index]
-            polyline = orient_polyline(edge["path"], vertices[start], vertices[neighbour], )
+            polyline = orient_polyline(edge["path"], vertices[start], vertices[neighbour])
 
             if polyline is None:
                 raise RuntimeError(f"Could not orient raw edge {edge['id']} from vertex {start} to vertex {neighbour}.")
@@ -188,11 +193,11 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
                 if next_edge_index in visited_edges:
                     raise RuntimeError(f"Raw edge {edges[next_edge_index]['id']} was encountered twice during compression.")
                 next_edge = edges[next_edge_index]
-                next_polyline = orient_polyline(next_edge["path"], vertices[current], vertices[next_vertex], )
+                next_polyline = orient_polyline(next_edge["path"], vertices[current], vertices[next_vertex])
                 if next_polyline is None:
                     raise RuntimeError(f"Could not orient raw edge {next_edge['id']} from vertex {current} to vertex {next_vertex}.")
                 polyline = _concatenate_polyline(polyline, next_polyline)
-                raw_edge_ids.append(int(next_edge['id']))
+                raw_edge_ids.append(int(next_edge["id"]))
                 chain_vertices.append(next_vertex)
 
                 visited_edges.add(next_edge_index)
@@ -201,8 +206,8 @@ def compress_degree_two_chains(vertices: RawVertices, edges: RawEdges) -> tuple[
             compressed_edges.append(_canonicalize_compressed_edge(start, current, polyline, raw_edge_ids, chain_vertices))
 
     if len(visited_edges) != len(edges):
-        missing = sorted(int(edges[index]['id']) for index in range(len(edges)) if edges[index]['id'] not in visited_edges)
-        raise RuntimeError(f'Compression did not visit raw edges {missing}')
+        missing = sorted(int(edges[index]["id"]) for index in range(len(edges)) if edges[index]["id"] not in visited_edges)
+        raise RuntimeError(f"Compression did not visit raw edges {missing}")
     return junctions, compressed_edges
 
 

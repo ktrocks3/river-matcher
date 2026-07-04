@@ -72,7 +72,7 @@ def _as_xy_point(point: Any) -> XYArray | None:
     return coordinates
 
 
-def orient_polyline(polyline: Any, start_xy: Any, end_xy: Any, ) -> XYArray | None:
+def orient_polyline(polyline: Any, start_xy: Any, end_xy: Any) -> XYArray | None:
     """Orient a polyline from start_xy toward end_xy."""
     points = as_xy_array(polyline)
     start = _as_xy_point(start_xy)
@@ -100,7 +100,7 @@ def polyline_length(polyline: Any) -> float:
     return float(np.sum(lengths))
 
 
-def sample_polyline_by_arclength(polyline: Any, samples: int, ) -> XYArray | None:
+def sample_polyline_by_arclength(polyline: Any, samples: int) -> XYArray | None:
     """Sample a polyline at equally spaced arclength positions."""
     points = as_xy_array(polyline)
 
@@ -125,10 +125,10 @@ def sample_polyline_by_arclength(polyline: Any, samples: int, ) -> XYArray | Non
 
     sample_count = max(2, int(samples))
     requested = _float64_array(np.linspace(0.0, total, sample_count, dtype=np.float64))
-    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths),)))
+    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths))))
 
     segment_indices = _float64_array(np.searchsorted(cumulative, requested, side="right") - 1).astype(np.intp)
-    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1, )
+    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
 
     fractions = _float64_array((requested - cumulative[segment_indices]) / lengths[segment_indices])
     expanded_fractions = _float64_array(np.expand_dims(fractions, axis=1))
@@ -142,7 +142,7 @@ def sample_polyline_by_arclength(polyline: Any, samples: int, ) -> XYArray | Non
     return _contiguous_float64(sampled)
 
 
-def sample_polyline_with_tangents(polyline: Any, samples: int, ) -> tuple[XYArray | None, XYArray | None]:
+def sample_polyline_with_tangents(polyline: Any, samples: int) -> tuple[XYArray | None, XYArray | None]:
     """Return equal-arclength samples and unit segment tangents."""
     points = as_xy_array(polyline)
 
@@ -167,7 +167,7 @@ def sample_polyline_with_tangents(polyline: Any, samples: int, ) -> tuple[XYArra
 
     sample_count = max(2, int(samples))
     requested = _float64_array(np.linspace(0.0, total, sample_count, dtype=np.float64))
-    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths),)))
+    cumulative = _float64_array(np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths))))
 
     segment_indices = _index_array(np.searchsorted(cumulative, requested, side="right") - 1)
     segment_indices = _index_array(np.clip(segment_indices, 0, len(lengths) - 1))
@@ -181,7 +181,7 @@ def sample_polyline_with_tangents(polyline: Any, samples: int, ) -> tuple[XYArra
     sampled[0] = points[0]
     sampled[-1] = points[-1]
 
-    return _contiguous_float64(sampled), _contiguous_float64(tangents),
+    return _contiguous_float64(sampled), _contiguous_float64(tangents)
 
 
 def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
@@ -199,7 +199,7 @@ def prepare_polyline_segments(polyline: Any) -> PreparedPolyline | None:
     return _contiguous_float64(starts[valid]), _contiguous_float64(vectors[valid]), _contiguous_float64(squared_lengths[valid])
 
 
-def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None, ) -> float:
+def point_to_prepared_polyline_distance(point: Any, prepared_polyline: PreparedPolyline | None) -> float:
     """Return the Euclidean distance from one point to a prepared polyline."""
     coordinates = _as_xy_point(point)
 
@@ -242,7 +242,7 @@ def points_to_prepared_polyline_distances(points: Any, prepared_polyline: Prepar
     normalized_chunk_size = max(1, int(chunk_size))
 
     for start_index in range(0, len(query_points), normalized_chunk_size):
-        chunk = query_points[start_index:start_index + normalized_chunk_size]
+        chunk = query_points[start_index : start_index + normalized_chunk_size]
         point_offsets = _float64_array(np.expand_dims(chunk, axis=1) - np.expand_dims(starts, axis=0))
 
         projection_numerators = _float64_array(np.einsum("pse,se->ps", point_offsets, vectors))
@@ -257,7 +257,7 @@ def points_to_prepared_polyline_distances(points: Any, prepared_polyline: Prepar
 
         closest_offsets = _float64_array(expanded_starts + expanded_projection * expanded_vectors - expanded_chunk)
         squared_distances = np.einsum("psi, psi->ps", closest_offsets, closest_offsets)
-        distances[start_index:start_index + len(chunk)] = np.sqrt(np.min(squared_distances, axis=1))
+        distances[start_index : start_index + len(chunk)] = np.sqrt(np.min(squared_distances, axis=1))
     return distances
 
 
@@ -274,7 +274,7 @@ def closest_segment_distance_and_tangent(point: Any, polyline: Any) -> tuple[flo
     coordinates = _as_xy_point(point)
     prepared = prepare_polyline_segments(polyline)
     if prepared is None or coordinates is None:
-        return float('inf'), None
+        return float("inf"), None
 
     starts, vectors, squared_lengths = prepared
     relative = _float64_array(coordinates[None, :] - starts)

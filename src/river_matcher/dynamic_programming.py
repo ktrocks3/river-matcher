@@ -7,7 +7,6 @@ from enum import StrEnum
 from itertools import product
 from operator import index
 from typing import Protocol
-from urllib import request
 
 from river_matcher.decomposition import Bag, SourceDecomposition
 
@@ -93,6 +92,7 @@ type AllMessages = dict[Objective, ObjectiveMessages]
 
 class _CostEvaluator:
     """Memoize every edge-ID-aware local cost request once per DP run"""
+
     __slots__ = ("_cache", "_cost")
 
     def __init__(self, cost: EdgeCost) -> None:
@@ -168,19 +168,21 @@ def _recover_solution(decomposition: SourceDecomposition, messages: AllMessages,
                 raise RuntimeError(f"Missing child message for separator key {child_key} at bag {tuple(sorted(child))}.")
             stack.append((child, child_entry))
     ordered_mapping = {vertex: mapping[vertex] for vertex in sorted(mapping)}
-    return DPSolution(objective=objective, value=root_entry.value, mapping=ordered_mapping, )
+    return DPSolution(objective=objective, value=root_entry.value, mapping=ordered_mapping)
 
-def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost,
-           objectives: tuple[Objective, ...]) -> tuple[dict[Objective, DPSolution | None], DPStatistics]:
+
+def _solve(
+    decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...]
+) -> tuple[dict[Objective, DPSolution | None], DPStatistics]:
     if not objectives:
         raise ValueError("At least one objective must be requested.")
 
     requested = tuple(dict.fromkeys(objectives))
     need_additive = Objective.ADDITIVE in requested
     need_bottleneck = Objective.BOTTLENECK in requested
-    candidates = _normalized_candidate_sets(decomposition, candidate_sets)
+    candidates = _normalize_candidate_sets(decomposition, candidate_sets)
     evaluator = _CostEvaluator(edge_cost)
-    messages: AllMessages = {objective : {} for objective in objectives}
+    messages: AllMessages = {objective: {} for objective in objectives}
     bag_statistics: list[BagDPStatistics] = []
     for bag in decomposition.postorder:
         plan = decomposition.bag_plans[bag]
@@ -191,7 +193,7 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
         if any(not domain for domain in candidate_lists) or child_infeasible:
             for objective in requested:
                 messages[objective][bag] = tables[objective]
-            bag_statistics.append(BagDPStatistics(bag=bag, enumerated_states=0, feasible_states=0, message_entries=0, ))
+            bag_statistics.append(BagDPStatistics(bag=bag, enumerated_states=0, feasible_states=0, message_entries=0))
             continue
         enumerated_states = 0
         feasible_states = 0
@@ -203,24 +205,21 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
             valid = True
 
             for edge_id, u_position, v_position in plan.owned_edge_positions:
-                source_u = plan.variables[u_position]
-                source_v = plan.variables[v_position]
-                target_u = state[u_position]
-                target_v = state[v_position]
-                value = evaluator((edge_id, source_u, source_v, target_u, target_v,))
+                source_u, source_v = plan.variables[u_position], plan.variables[v_position]
+                target_u, target_v = state[u_position], state[v_position]
+                value = evaluator((edge_id, source_u, source_v, target_u, target_v))
 
                 if not math.isfinite(value):
                     valid = False
                     break
 
                 local_sum += value
-                local_max = max(local_max, value, )
+                local_max = max(local_max, value)
 
             if not valid:
                 continue
 
-            total_sum = local_sum
-            total_max = local_max
+            total_sum, total_max = local_sum, local_max
             child_keys: list[SeparatorKey] = []
 
             for child, positions in plan.child_positions:
@@ -229,21 +228,17 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
                 if need_additive:
                     additive_entry = messages[Objective.ADDITIVE][child].get(child_key)
-
                     if additive_entry is None:
                         valid = False
                         break
-
                     total_sum += additive_entry.value
 
                 if need_bottleneck:
                     bottleneck_entry = messages[Objective.BOTTLENECK][child].get(child_key)
-
                     if bottleneck_entry is None:
                         valid = False
                         break
-
-                    total_max = max(total_max, bottleneck_entry.value, )
+                    total_max = max(total_max, bottleneck_entry.value)
 
             if not valid:
                 continue
@@ -254,28 +249,33 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
             if need_additive:
                 previous = tables[Objective.ADDITIVE].get(parent_key)
-
-                if _is_better(total_sum, state, previous, ):
-                    tables[Objective.ADDITIVE][parent_key] = _MessageEntry(value=total_sum, state=state, child_keys=stored_child_keys, )
+                if _is_better(total_sum, state, previous):
+                    tables[Objective.ADDITIVE][parent_key] = _MessageEntry(value=total_sum, state=state, child_keys=stored_child_keys)
 
             if need_bottleneck:
                 previous = tables[Objective.BOTTLENECK].get(parent_key)
-
-                if _is_better(total_max, state, previous, ):
-                    tables[Objective.BOTTLENECK][parent_key] = _MessageEntry(value=total_max, state=state, child_keys=stored_child_keys, )
+                if _is_better(total_max, state, previous):
+                    tables[Objective.BOTTLENECK][parent_key] = _MessageEntry(value=total_max, state=state, child_keys=stored_child_keys)
 
         for objective in requested:
             messages[objective][bag] = tables[objective]
-
         entry_counts = {len(tables[objective]) for objective in requested}
-
         if len(entry_counts) != 1:
-            raise RuntimeError(f"Objectives produced different feasible separator keys for bag "
-                               f"{tuple(sorted(bag))}.")
+            raise RuntimeError(f"Objectives produced different feasible separator keys for bag {tuple(sorted(bag))}.")
+        bag_statistics.append(BagDPStatistics(bag=bag, enumerated_states=enumerated_states, feasible_states=feasible_states, message_entries=entry_counts.pop()))
 
-        bag_statistics.append(BagDPStatistics(bag=bag, enumerated_states=enumerated_states, feasible_states=feasible_states, message_entries=entry_counts.pop(), ))
-
-    statistics = DPStatistics(bags=tuple(bag_statistics), unique_cost_requests=evaluator.unique_requests, )
-    solutions = {objective: _recover_solution(decomposition, messages, objective, ) for objective in requested}
+    statistics = DPStatistics(bags=tuple(bag_statistics), unique_cost_requests=evaluator.unique_requests)
+    solutions = {objective: _recover_solution(decomposition, messages, objective) for objective in requested}
 
     return solutions, statistics
+
+
+def solve_tree_dp(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objective: Objective | str) -> DPSolveResult:
+    resolved_objective = Objective(objective)
+    solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (resolved_objective,))
+    return DPSolveResult(objective=resolved_objective, solution=solutions[resolved_objective], statistics=statistics)
+
+
+def solve_tree_dp_both(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost) -> BothObjectiveResult:
+    solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (Objective.ADDITIVE, Objective.BOTTLENECK))
+    return BothObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK], statistics=statistics)

@@ -129,8 +129,8 @@ def _reconstruct_path(end: int, parent: ParentMap, parent_segment: ParentSegment
 
 
 class ShortestPathWitnessFinder:
-    """ Resolve ordinary geometric-length the shortest paths in a target multigraph.
-        Parallel edges remain separate adjacency entries and retain their own geometry during path reconstruction."""
+    """Resolve ordinary geometric-length the shortest paths in a target multigraph.
+    Parallel edges remain separate adjacency entries and retain their own geometry during path reconstruction."""
 
     def __init__(self, target: JunctionGraph) -> None:
         self.target = target
@@ -195,8 +195,8 @@ class ShortestPathWitnessFinder:
 
 
 class SourceGuidedWitnessFinder:
-    """ Resolve target paths using one corridor-weighted graph per source edge.
-        Target edge weights are estimated from equally spaced samples and remain distinct for parallel target edges."""
+    """Resolve target paths using one corridor-weighted graph per source edge.
+    Target edge weights are estimated from equally spaced samples and remain distinct for parallel target edges."""
 
     def __init__(self, source: JunctionGraph, target: JunctionGraph, *, rho: float, edge_samples: int = 12) -> None:
         radius = float(rho)
@@ -332,15 +332,14 @@ class SourceGuidedWitnessFinder:
         return path
 
     def paths(self, requests: Iterable[WitnessRequest]) -> WitnessPaths:
-        """ Resolve several witness requests.
-            The tree cache ensures that requests sharing a source edge and mapped start vertex reuse one Dijkstra run."""
+        """Resolve several witness requests.
+        The tree cache ensures that requests sharing a source edge and mapped start vertex reuse one Dijkstra run."""
         output: WitnessPaths = {}
         for raw_request in requests:
             request = tuple(int(value) for value in raw_request)
 
             if len(request) != 5:
-                raise ValueError("Each witness request must contain "
-                                 "(edge_id, u, v, target_start, target_end).")
+                raise ValueError("Each witness request must contain " "(edge_id, u, v, target_start, target_end).")
 
             edge_id, u, v, target_start, target_end = request
             key: WitnessRequest = (edge_id, u, v, target_start, target_end)

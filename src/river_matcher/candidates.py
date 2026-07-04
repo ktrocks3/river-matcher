@@ -69,7 +69,7 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
         if len(squared_lengths) == 0:
             raise ValueError(f"Target edge e{edge.id} has no usable geometric segments.")
         endpoints.append((edge.u, edge.v))
-        bboxes.append((float(np.min(points[:, 0])), float(np.min(points[:, 1])), float(np.max(points[:, 0])), float(np.max(points[:, 1])),))
+        bboxes.append((float(np.min(points[:, 0])), float(np.min(points[:, 1])), float(np.max(points[:, 0])), float(np.max(points[:, 1]))))
         segment_starts.append(starts)
         segment_vectors.append(vectors)
         segment_squared_lengths.append(squared_lengths)
@@ -84,14 +84,21 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
         packed_starts = _float64_array(np.empty((0, 2), dtype=np.float64))
         packed_vectors = _float64_array(np.empty((0, 2), dtype=np.float64))
         packed_lengths = _float64_array(np.empty(0, dtype=np.float64))
-    return (_contiguous_int64(np.asarray(endpoints, dtype=np.int64).reshape((-1, 2))), _contiguous_float64(np.asarray(bboxes, dtype=np.float64).reshape((-1, 4))), packed_starts,
-            packed_vectors, packed_lengths, _contiguous_int64(edge_offsets))
+    return (
+        _contiguous_int64(np.asarray(endpoints, dtype=np.int64).reshape((-1, 2))),
+        _contiguous_float64(np.asarray(bboxes, dtype=np.float64).reshape((-1, 4))),
+        packed_starts,
+        packed_vectors,
+        packed_lengths,
+        _contiguous_int64(edge_offsets),
+    )
 
 
 @njit(cache=True, parallel=True, fastmath=False)
-def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
-                                    edge_offsets: IntArray, rho: float) -> FloatArray:
-    """ Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
+def _candidate_edge_distances_numba(
+    source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray, rho: float
+) -> FloatArray:
+    """Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
     point-to-segment projection."""
     source_count = source_points.shape[0]
     edge_count = bboxes.shape[0]
@@ -116,7 +123,7 @@ def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArra
 
                 offset_x = sx + projection * vx - px
                 offset_y = sy + projection * vy - py
-                squared_distance = (offset_x ** 2 + offset_y ** 2)
+                squared_distance = offset_x**2 + offset_y**2
                 if squared_distance < best_squared:
                     best_squared = squared_distance
             if math.isfinite(best_squared):
@@ -124,7 +131,7 @@ def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArra
     return distances
 
 
-def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, distances: FloatArray, *, rho: float, top_k: int, ) -> CandidateSets:
+def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, distances: FloatArray, *, rho: float, top_k: int) -> CandidateSets:
     """Apply stable distance ordering and endpoint deduplication."""
     candidate_sets: CandidateSets = {}
     for source_index, raw_vertex in enumerate(source_ids):
@@ -134,8 +141,8 @@ def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, di
         for edge_index in range(len(endpoints)):
             distance = float(distances[source_index, edge_index])
             if distance <= rho:
-                hits.append((distance, int(endpoints[edge_index, 0]),))
-                hits.append((distance, int(endpoints[edge_index, 1]),))
+                hits.append((distance, int(endpoints[edge_index, 0])))
+                hits.append((distance, int(endpoints[edge_index, 1])))
 
         # Equal-distance entries retain target-edge order and endpoint order.
         hits.sort(key=lambda item: item[0])
@@ -155,9 +162,9 @@ def _candidate_sets_from_distances(source_ids: IntArray, endpoints: IntArray, di
 
 
 def compute_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho: float = 10.0, top_k: int = 25) -> CandidateSets:
-    """ Generate target-vertex candidates for every source vertex.
+    """Generate target-vertex candidates for every source vertex.
     A target edge contributes both endpoints when the source vertex lies at most ``rho`` from that edge's polyline. Candidate vertices are ordered by the corresponding edge
-    distance, deduplicated, and capped at ``top_k``. """
+    distance, deduplicated, and capped at ``top_k``."""
     radius, limit = _normalize_parameters(rho, top_k)
     source_ids = _contiguous_int64(np.asarray(sorted(source.vertices), dtype=np.int64))
     source_points = _contiguous_float64(np.asarray([source.coordinates[int(vertex)] for vertex in source_ids], dtype=np.float64))
@@ -176,8 +183,9 @@ def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> flo
     return math.hypot(dx, dy)
 
 
-def _point_to_packed_edge_distance(point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
-                                   edge_offsets: IntArray) -> float:
+def _point_to_packed_edge_distance(
+    point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray
+) -> float:
     """Reference point-to-edge distance using the packed segment arrays."""
     px, py = point
     best_squared = math.inf
@@ -188,16 +196,16 @@ def _point_to_packed_edge_distance(point: tuple[float, float], edge_index: int, 
         squared_length = float(segment_squared_lengths[segment_index])
         projection = ((px - sx) * vx + (py - sy) * vy) / squared_length
         offset_x, offset_y = sx + projection * vx - px, sy + projection * vy - py
-        squared_distance = (offset_x * offset_x + offset_y * offset_y)
+        squared_distance = offset_x * offset_x + offset_y * offset_y
         best_squared = min(best_squared, squared_distance)
     return math.sqrt(best_squared)
 
 
 def compute_candidate_sets_reference(source: JunctionGraph, target: JunctionGraph, *, rho: float = 10.0, top_k: int = 25) -> CandidateSets:
-    """ Generate candidate sets without Numba.
+    """Generate candidate sets without Numba.
     This intentionally mirrors ``compute_candidate_sets`` and exists as an independent verification path rather than as the production implementation."""
     radius, limit = _normalize_parameters(rho, top_k)
-    endpoints, bboxes, segment_starts, segment_vectors, segment_squared_lengths, edge_offsets, = _prepare_target_edges(target)
+    endpoints, bboxes, segment_starts, segment_vectors, segment_squared_lengths, edge_offsets = _prepare_target_edges(target)
     candidate_sets: CandidateSets = {}
 
     for source_vertex in sorted(source.vertices):
