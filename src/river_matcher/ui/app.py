@@ -5,7 +5,7 @@ import sys
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QThreadPool, QTimer, Qt
+from PySide6.QtCore import QSettings, QThreadPool, QTimer, Qt, QLocale
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         self.candidate_rho.setRange(0.0, 1_000_000.0)
         self.candidate_rho.setDecimals(3)
         self.candidate_rho.setValue(float(self.settings.value("candidate_rho", 10.0)))
+        self.candidate_rho.setLocale(QLocale.c())
 
         self.top_k = QSpinBox()
         self.top_k.setRange(1, 100_000)
