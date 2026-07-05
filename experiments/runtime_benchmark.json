@@ -1,0 +1,85 @@
+{
+  "benchmark_name": "thesis_runtime_benchmark",
+  "output_dir": "benchmark_results",
+  "warmups": 1,
+  "repetitions": 5,
+  "seed": 20260705,
+  "defaults": {
+    "candidate_rho": 10.0,
+    "top_k": 25
+  },
+  "costs": [
+    {
+      "name": "relative_length_error",
+      "options": {}
+    },
+    {
+      "name": "log_length_distortion",
+      "options": {}
+    },
+    {
+      "name": "mean_distance_tangent",
+      "options": {}
+    },
+    {
+      "name": "hausdorff_distance",
+      "options": {}
+    },
+    {
+      "name": "symmetric_corridor_exceedance",
+      "options": {}
+    },
+    {
+      "name": "discrete_frechet_distance",
+      "options": {}
+    },
+    {
+      "name": "dynamic_time_warping_distance",
+      "options": {}
+    }
+  ],
+  "pairs": [
+    {
+      "id": "1955e5_to_1955e3",
+      "source": "../Thesis/2-Data/GraphExport/1955e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e3.txt",
+      "candidate_rho": 10.0
+    },
+    {
+      "id": "1998e5_to_1998e3",
+      "source": "../Thesis/2-Data/GraphExport/1998e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1998e3.txt",
+      "candidate_rho": 10.0
+    },
+    {
+      "id": "2014e5_to_2014e3",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/2014e3.txt",
+      "candidate_rho": 10.0
+    },
+    {
+      "id": "2014e5_to_1955e3",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e3.txt",
+      "candidate_rho": 10.0
+    },
+    {
+      "id": "2014e5_to_1955e5",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e5.txt",
+      "candidate_rho": 12.5
+    },
+    {
+      "id": "1998e3_to_1955e3",
+      "source": "../Thesis/2-Data/GraphExport/1998e3.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e3.txt",
+      "candidate_rho": 12.5,
+      "costs": [
+        {
+          "name": "relative_length_error",
+          "options": {}
+        }
+      ]
+    }
+  ]
+}

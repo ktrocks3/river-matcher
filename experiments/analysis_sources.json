@@ -1,0 +1,25 @@
+{
+  "analysis_name": "thesis_experiments",
+  "output_dir": "analysis_results",
+  "suites": [
+    {
+      "path": "experiment_results/thesis_main_experiments_v2/suite_summary.json"
+    },
+    {
+      "path": "experiment_results/confirmed_pairs/suite_summary.json"
+    },
+    {
+      "path": "experiment_results/cross_year_same_scale/suite_summary.json"
+    },
+    {
+      "path": "experiment_results/rho_screen_12_5/suite_summary.json",
+      "include_pairs": [
+        "1998e3_to_1955e3_rho12_5"
+      ],
+      "rename_pairs": {
+        "1998e3_to_1955e3_rho12_5": "1998e3_to_1955e3"
+      }
+    }
+  ],
+  "benchmark_summary": "benchmark_results/thesis_runtime_benchmark/benchmark_summary.csv"
+}
