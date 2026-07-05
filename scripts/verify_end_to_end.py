@@ -88,7 +88,7 @@ def _decomposition_report(decomposition: SourceDecomposition, candidate_sets: Ma
                 "candidate_product": states,
                 "owned_edges": len(plan.owned_edge_positions),
                 "children": len(plan.child_positions),
-            }
+            },
         )
 
     structure = {
@@ -181,7 +181,7 @@ def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, soluti
 
     if not math.isclose(realized_value, solution.value, rel_tol=1e-10, abs_tol=1e-12):
         raise RuntimeError(
-            f"Recovered {solution.objective.value} value differs from the DP value: DP={solution.value}, realized={realized_value}."
+            f"Recovered {solution.objective.value} value differs from the DP value: DP={solution.value}, realized={realized_value}.",
         )
 
     return {
@@ -308,30 +308,30 @@ def _print_run(run: Mapping[str, Any]) -> None:
     print(f"\n=== repeat {run['repeat']} ===")
     print(
         f"{source['name']} ({source['vertices']} V, {source['edges']} E) -> "
-        f"{target['name']} ({target['vertices']} V, {target['edges']} E)"
+        f"{target['name']} ({target['vertices']} V, {target['edges']} E)",
     )
     print(
         "candidates: "
         f"empty={candidates['empty_domains']}, total={candidates['total_candidates']}, "
         f"min={candidates['minimum_candidates']}, median={candidates['median_candidates']}, "
-        f"max={candidates['maximum_candidates']}"
+        f"max={candidates['maximum_candidates']}",
     )
     print(
         "decomposition: "
         f"width={decomposition['width']}, bags={decomposition['bag_count']}, "
-        f"estimated states={decomposition['estimated_state_upper_bound']}"
+        f"estimated states={decomposition['estimated_state_upper_bound']}",
     )
     print(
         "DP: "
         f"enumerated={dp['enumerated_states']}, feasible={dp['feasible_states']}, "
-        f"messages={dp['message_entries']}, unique costs={dp['unique_cost_requests']}"
+        f"messages={dp['message_entries']}, unique costs={dp['unique_cost_requests']}",
     )
 
     for objective in ("additive", "bottleneck"):
         result = objectives[objective]
         print(
             f"{objective}: feasible={result['feasible']}, value={result['value']}, "
-            f"mapping={result['mapping_size']}, witnesses={result['witness_count']}"
+            f"mapping={result['mapping_size']}, witnesses={result['witness_count']}",
         )
 
     print("timings:")

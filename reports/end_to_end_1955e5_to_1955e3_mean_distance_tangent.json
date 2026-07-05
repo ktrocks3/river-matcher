@@ -1,6 +1,6 @@
 {
-  "created_utc": "2026-07-04T19:40:06.955768+00:00",
-  "git_commit": "8a36fa2c6035a28001838c6a09df29daa2937c1e",
+  "created_utc": "2026-07-05T09:21:29.811767+00:00",
+  "git_commit": "9568082a3298f1db6f458e78bad3dfb37d8395eb",
   "platform": "Windows-11-10.0.26200-SP0",
   "python": "3.12.1 (tags/v3.12.1:2305ca5, Dec  7 2023, 22:03:25) [MSC v.1937 64 bit (AMD64)]",
   "reproducible": true,
@@ -167,8 +167,8 @@
               1481
             ],
             "enumerated_states": 750,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 655,
+            "message_entries": 125
           },
           {
             "bag": [
@@ -178,7 +178,7 @@
               1032
             ],
             "enumerated_states": 2160,
-            "feasible_states": 1360,
+            "feasible_states": 1736,
             "message_entries": 270
           },
           {
@@ -197,7 +197,7 @@
               816
             ],
             "enumerated_states": 384,
-            "feasible_states": 283,
+            "feasible_states": 384,
             "message_entries": 64
           },
           {
@@ -206,8 +206,8 @@
               3918
             ],
             "enumerated_states": 14,
-            "feasible_states": 9,
-            "message_entries": 5
+            "feasible_states": 12,
+            "message_entries": 7
           },
           {
             "bag": [
@@ -216,7 +216,7 @@
               265
             ],
             "enumerated_states": 336,
-            "feasible_states": 158,
+            "feasible_states": 296,
             "message_entries": 48
           },
           {
@@ -225,8 +225,8 @@
               4097
             ],
             "enumerated_states": 12,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 10,
+            "message_entries": 6
           },
           {
             "bag": [
@@ -234,9 +234,9 @@
               265,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 336,
+            "feasible_states": 336,
+            "message_entries": 56
           },
           {
             "bag": [
@@ -244,9 +244,9 @@
               312,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 448,
+            "feasible_states": 448,
+            "message_entries": 56
           },
           {
             "bag": [
@@ -254,9 +254,9 @@
               857,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 336,
+            "feasible_states": 304,
+            "message_entries": 48
           },
           {
             "bag": [
@@ -265,9 +265,9 @@
               816,
               857
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 3072,
+            "feasible_states": 2880,
+            "message_entries": 384
           },
           {
             "bag": [
@@ -277,8 +277,8 @@
               857
             ],
             "enumerated_states": 1920,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1712,
+            "message_entries": 192
           },
           {
             "bag": [
@@ -288,8 +288,8 @@
               964
             ],
             "enumerated_states": 768,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 616,
+            "message_entries": 192
           },
           {
             "bag": [
@@ -299,9 +299,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 9216,
+            "feasible_states": 9216,
+            "message_entries": 1152
           },
           {
             "bag": [
@@ -311,7 +311,7 @@
               857
             ],
             "enumerated_states": 1944,
-            "feasible_states": 1181,
+            "feasible_states": 1884,
             "message_entries": 216
           },
           {
@@ -322,9 +322,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 10368,
+            "feasible_states": 10368,
+            "message_entries": 2592
           },
           {
             "bag": [
@@ -333,9 +333,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2592,
+            "feasible_states": 2592,
+            "message_entries": 432
           },
           {
             "bag": [
@@ -345,8 +345,8 @@
               1132
             ],
             "enumerated_states": 3168,
-            "feasible_states": 1453,
-            "message_entries": 512
+            "feasible_states": 2560,
+            "message_entries": 528
           },
           {
             "bag": [
@@ -356,7 +356,7 @@
               1290
             ],
             "enumerated_states": 6864,
-            "feasible_states": 3934,
+            "feasible_states": 6720,
             "message_entries": 624
           },
           {
@@ -367,9 +367,9 @@
               1032,
               1290
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 28080,
+            "feasible_states": 28080,
+            "message_entries": 4680
           },
           {
             "bag": [
@@ -378,8 +378,8 @@
               1465
             ],
             "enumerated_states": 96,
-            "feasible_states": 42,
-            "message_entries": 29
+            "feasible_states": 73,
+            "message_entries": 32
           },
           {
             "bag": [
@@ -389,8 +389,8 @@
               1465
             ],
             "enumerated_states": 3328,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 3096,
+            "message_entries": 832
           },
           {
             "bag": [
@@ -400,9 +400,9 @@
               1290,
               1465
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 37440,
+            "feasible_states": 37440,
+            "message_entries": 4680
           },
           {
             "bag": [
@@ -412,9 +412,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 23400,
+            "feasible_states": 22360,
+            "message_entries": 2600
           },
           {
             "bag": [
@@ -424,9 +424,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 15600,
+            "feasible_states": 14600,
+            "message_entries": 1200
           },
           {
             "bag": [
@@ -436,8 +436,8 @@
               1465
             ],
             "enumerated_states": 1920,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1596,
+            "message_entries": 240
           },
           {
             "bag": [
@@ -447,9 +447,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 6000,
+            "feasible_states": 5600,
+            "message_entries": 200
           },
           {
             "bag": [
@@ -458,9 +458,9 @@
               1481,
               1566
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2600,
+            "feasible_states": 2490,
+            "message_entries": 65
           },
           {
             "bag": [
@@ -468,9 +468,9 @@
               1566,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 325,
+            "feasible_states": 325,
+            "message_entries": 25
           },
           {
             "bag": [
@@ -479,7 +479,7 @@
               1884
             ],
             "enumerated_states": 480,
-            "feasible_states": 346,
+            "feasible_states": 462,
             "message_entries": 60
           },
           {
@@ -489,7 +489,7 @@
               1884
             ],
             "enumerated_states": 300,
-            "feasible_states": 222,
+            "feasible_states": 280,
             "message_entries": 50
           },
           {
@@ -499,8 +499,8 @@
               1909
             ],
             "enumerated_states": 500,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 450,
+            "message_entries": 50
           },
           {
             "bag": [
@@ -509,9 +509,9 @@
               1729,
               1909
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1000,
+            "feasible_states": 920,
+            "message_entries": 200
           },
           {
             "bag": [
@@ -520,9 +520,9 @@
               1909,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1000,
+            "feasible_states": 900,
+            "message_entries": 250
           },
           {
             "bag": [
@@ -532,7 +532,7 @@
               2290
             ],
             "enumerated_states": 1800,
-            "feasible_states": 1665,
+            "feasible_states": 1800,
             "message_entries": 450
           },
           {
@@ -543,7 +543,7 @@
               2468
             ],
             "enumerated_states": 2880,
-            "feasible_states": 1776,
+            "feasible_states": 2720,
             "message_entries": 720
           },
           {
@@ -554,7 +554,7 @@
               2740
             ],
             "enumerated_states": 3360,
-            "feasible_states": 2940,
+            "feasible_states": 3300,
             "message_entries": 480
           },
           {
@@ -565,7 +565,7 @@
               2740
             ],
             "enumerated_states": 4320,
-            "feasible_states": 3600,
+            "feasible_states": 4140,
             "message_entries": 540
           },
           {
@@ -576,7 +576,7 @@
               2745
             ],
             "enumerated_states": 7560,
-            "feasible_states": 5850,
+            "feasible_states": 7290,
             "message_entries": 1260
           },
           {
@@ -587,8 +587,8 @@
               2510
             ],
             "enumerated_states": 1350,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1080,
+            "message_entries": 225
           },
           {
             "bag": [
@@ -597,9 +597,9 @@
               2505,
               2510
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1350,
+            "feasible_states": 1305,
+            "message_entries": 270
           },
           {
             "bag": [
@@ -608,9 +608,9 @@
               2510,
               2633
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1080,
+            "feasible_states": 972,
+            "message_entries": 216
           },
           {
             "bag": [
@@ -620,8 +620,8 @@
               2757
             ],
             "enumerated_states": 1056,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 900,
+            "message_entries": 264
           },
           {
             "bag": [
@@ -631,7 +631,7 @@
               3146
             ],
             "enumerated_states": 512,
-            "feasible_states": 280,
+            "feasible_states": 404,
             "message_entries": 128
           },
           {
@@ -642,8 +642,8 @@
               3146
             ],
             "enumerated_states": 768,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 688,
+            "message_entries": 96
           },
           {
             "bag": [
@@ -652,9 +652,9 @@
               3146,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 672,
+            "feasible_states": 672,
+            "message_entries": 168
           },
           {
             "bag": [
@@ -664,7 +664,7 @@
               3389
             ],
             "enumerated_states": 2100,
-            "feasible_states": 1284,
+            "feasible_states": 1842,
             "message_entries": 420
           },
           {
@@ -673,7 +673,7 @@
               9667
             ],
             "enumerated_states": 12,
-            "feasible_states": 7,
+            "feasible_states": 10,
             "message_entries": 6
           },
           {
@@ -683,7 +683,7 @@
               3832
             ],
             "enumerated_states": 96,
-            "feasible_states": 62,
+            "feasible_states": 92,
             "message_entries": 16
           },
           {
@@ -692,8 +692,8 @@
               9659
             ],
             "enumerated_states": 16,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 12,
+            "message_entries": 4
           },
           {
             "bag": [
@@ -701,9 +701,9 @@
               3679,
               3832
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 96,
+            "feasible_states": 96,
+            "message_entries": 24
           },
           {
             "bag": [
@@ -711,9 +711,9 @@
               3653,
               3679
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 216,
+            "feasible_states": 192,
+            "message_entries": 54
           },
           {
             "bag": [
@@ -721,9 +721,9 @@
               3544,
               3679
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 432,
+            "feasible_states": 432,
+            "message_entries": 72
           },
           {
             "bag": [
@@ -731,9 +731,9 @@
               3530,
               3544
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 360,
+            "feasible_states": 332,
+            "message_entries": 40
           },
           {
             "bag": [
@@ -741,9 +741,9 @@
               3464,
               3544
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 320,
+            "feasible_states": 305,
+            "message_entries": 40
           },
           {
             "bag": [
@@ -751,9 +751,9 @@
               3349,
               3464
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 400,
+            "feasible_states": 374,
+            "message_entries": 80
           },
           {
             "bag": [
@@ -761,9 +761,9 @@
               3389,
               3464
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 560,
+            "feasible_states": 560,
+            "message_entries": 70
           },
           {
             "bag": [
@@ -772,9 +772,9 @@
               3167,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 4620,
+            "feasible_states": 4620,
+            "message_entries": 462
           },
           {
             "bag": [
@@ -783,9 +783,9 @@
               2757,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1848,
+            "feasible_states": 1820,
+            "message_entries": 308
           },
           {
             "bag": [
@@ -793,9 +793,9 @@
               2757,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 308,
+            "feasible_states": 308,
+            "message_entries": 44
           },
           {
             "bag": [
@@ -804,9 +804,9 @@
               2633,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2376,
+            "feasible_states": 2376,
+            "message_entries": 594
           },
           {
             "bag": [
@@ -815,9 +815,9 @@
               2745,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 8316,
+            "feasible_states": 8217,
+            "message_entries": 1386
           },
           {
             "bag": [
@@ -825,9 +825,9 @@
               2745,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1386,
+            "feasible_states": 1287,
+            "message_entries": 126
           },
           {
             "bag": [
@@ -835,9 +835,9 @@
               2290,
               2745
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1260,
+            "feasible_states": 1260,
+            "message_entries": 90
           },
           {
             "bag": [
@@ -845,9 +845,9 @@
               1929,
               2290
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 450,
+            "feasible_states": 450,
+            "message_entries": 50
           },
           {
             "bag": [
@@ -855,36 +855,36 @@
               1909,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 250,
+            "feasible_states": 250,
+            "message_entries": 1
           }
         ],
-        "enumerated_states": 50786,
-        "feasible_states": 26464,
-        "message_entries": 5904,
-        "unique_cost_requests": 2683
+        "enumerated_states": 218899,
+        "feasible_states": 211519,
+        "message_entries": 30866,
+        "unique_cost_requests": 4687
       },
       "objectives": {
         "additive": {
-          "feasible": false,
-          "mapping_digest": null,
-          "mapping_size": 0,
-          "value": null,
-          "value_hex": null,
-          "witness_count": 0,
-          "witness_digest": null,
-          "witness_points": 0
+          "feasible": true,
+          "mapping_digest": "6575e61621235636a5f7541578b89df71239214776dc647ab8573d276fb676e8",
+          "mapping_size": 70,
+          "value": 30.906025429593214,
+          "value_hex": "0x1.ee7f14855727cp+4",
+          "witness_count": 103,
+          "witness_digest": "538429bd8f87de967fe17d088bf7d8b6ae05169b53e394f9d126110c41211b2e",
+          "witness_points": 10242
         },
         "bottleneck": {
-          "feasible": false,
-          "mapping_digest": null,
-          "mapping_size": 0,
-          "value": null,
-          "value_hex": null,
-          "witness_count": 0,
-          "witness_digest": null,
-          "witness_points": 0
+          "feasible": true,
+          "mapping_digest": "360f460683a66561fde97bc2abd2cffb31f9c3e14ed28af56dc8579acd12d50f",
+          "mapping_size": 70,
+          "value": 5.376119686460603,
+          "value_hex": "0x1.5812584e2eb96p+2",
+          "witness_count": 103,
+          "witness_digest": "ded17b9cbd4537133933e411047ebc6cd39cb3a29061940e78150516204ded92",
+          "witness_points": 11319
         }
       },
       "repeat": 1,
@@ -900,18 +900,18 @@
         "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e3.txt",
         "vertices": 371
       },
-      "timestamp_utc": "2026-07-04T19:40:02.793815+00:00",
+      "timestamp_utc": "2026-07-05T09:21:23.339016+00:00",
       "timings_seconds": {
-        "candidate_generation": 0.3207890000194311,
-        "cost_creation": 0.10325719998218119,
-        "cost_factory": 0.06338520022109151,
-        "dynamic_programming": 2.6919376000296324,
-        "load_source": 0.4003238999284804,
-        "load_target": 0.8139150999486446,
-        "materialize_additive": 1.90013088285923e-06,
-        "materialize_bottleneck": 6.998889148235321e-07,
-        "source_decomposition": 0.01220069988630712,
-        "total": 4.405838700011373
+        "candidate_generation": 0.3533673998899758,
+        "cost_creation": 0.09959100000560284,
+        "cost_factory": 0.07443680008873343,
+        "dynamic_programming": 4.955451800022274,
+        "load_source": 0.4181274001020938,
+        "load_target": 0.8441415999550372,
+        "materialize_additive": 0.0011063998099416494,
+        "materialize_bottleneck": 0.0006777001544833183,
+        "source_decomposition": 0.012542900163680315,
+        "total": 6.759476399980485
       }
     },
     {
@@ -1076,8 +1076,8 @@
               1481
             ],
             "enumerated_states": 750,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 655,
+            "message_entries": 125
           },
           {
             "bag": [
@@ -1087,7 +1087,7 @@
               1032
             ],
             "enumerated_states": 2160,
-            "feasible_states": 1360,
+            "feasible_states": 1736,
             "message_entries": 270
           },
           {
@@ -1106,7 +1106,7 @@
               816
             ],
             "enumerated_states": 384,
-            "feasible_states": 283,
+            "feasible_states": 384,
             "message_entries": 64
           },
           {
@@ -1115,8 +1115,8 @@
               3918
             ],
             "enumerated_states": 14,
-            "feasible_states": 9,
-            "message_entries": 5
+            "feasible_states": 12,
+            "message_entries": 7
           },
           {
             "bag": [
@@ -1125,7 +1125,7 @@
               265
             ],
             "enumerated_states": 336,
-            "feasible_states": 158,
+            "feasible_states": 296,
             "message_entries": 48
           },
           {
@@ -1134,8 +1134,8 @@
               4097
             ],
             "enumerated_states": 12,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 10,
+            "message_entries": 6
           },
           {
             "bag": [
@@ -1143,9 +1143,9 @@
               265,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 336,
+            "feasible_states": 336,
+            "message_entries": 56
           },
           {
             "bag": [
@@ -1153,9 +1153,9 @@
               312,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 448,
+            "feasible_states": 448,
+            "message_entries": 56
           },
           {
             "bag": [
@@ -1163,9 +1163,9 @@
               857,
               862
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 336,
+            "feasible_states": 304,
+            "message_entries": 48
           },
           {
             "bag": [
@@ -1174,9 +1174,9 @@
               816,
               857
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 3072,
+            "feasible_states": 2880,
+            "message_entries": 384
           },
           {
             "bag": [
@@ -1186,8 +1186,8 @@
               857
             ],
             "enumerated_states": 1920,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1712,
+            "message_entries": 192
           },
           {
             "bag": [
@@ -1197,8 +1197,8 @@
               964
             ],
             "enumerated_states": 768,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 616,
+            "message_entries": 192
           },
           {
             "bag": [
@@ -1208,9 +1208,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 9216,
+            "feasible_states": 9216,
+            "message_entries": 1152
           },
           {
             "bag": [
@@ -1220,7 +1220,7 @@
               857
             ],
             "enumerated_states": 1944,
-            "feasible_states": 1181,
+            "feasible_states": 1884,
             "message_entries": 216
           },
           {
@@ -1231,9 +1231,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 10368,
+            "feasible_states": 10368,
+            "message_entries": 2592
           },
           {
             "bag": [
@@ -1242,9 +1242,9 @@
               857,
               964
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2592,
+            "feasible_states": 2592,
+            "message_entries": 432
           },
           {
             "bag": [
@@ -1254,8 +1254,8 @@
               1132
             ],
             "enumerated_states": 3168,
-            "feasible_states": 1453,
-            "message_entries": 512
+            "feasible_states": 2560,
+            "message_entries": 528
           },
           {
             "bag": [
@@ -1265,7 +1265,7 @@
               1290
             ],
             "enumerated_states": 6864,
-            "feasible_states": 3934,
+            "feasible_states": 6720,
             "message_entries": 624
           },
           {
@@ -1276,9 +1276,9 @@
               1032,
               1290
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 28080,
+            "feasible_states": 28080,
+            "message_entries": 4680
           },
           {
             "bag": [
@@ -1287,8 +1287,8 @@
               1465
             ],
             "enumerated_states": 96,
-            "feasible_states": 42,
-            "message_entries": 29
+            "feasible_states": 73,
+            "message_entries": 32
           },
           {
             "bag": [
@@ -1298,8 +1298,8 @@
               1465
             ],
             "enumerated_states": 3328,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 3096,
+            "message_entries": 832
           },
           {
             "bag": [
@@ -1309,9 +1309,9 @@
               1290,
               1465
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 37440,
+            "feasible_states": 37440,
+            "message_entries": 4680
           },
           {
             "bag": [
@@ -1321,9 +1321,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 23400,
+            "feasible_states": 22360,
+            "message_entries": 2600
           },
           {
             "bag": [
@@ -1333,9 +1333,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 15600,
+            "feasible_states": 14600,
+            "message_entries": 1200
           },
           {
             "bag": [
@@ -1345,8 +1345,8 @@
               1465
             ],
             "enumerated_states": 1920,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1596,
+            "message_entries": 240
           },
           {
             "bag": [
@@ -1356,9 +1356,9 @@
               1465,
               1481
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 6000,
+            "feasible_states": 5600,
+            "message_entries": 200
           },
           {
             "bag": [
@@ -1367,9 +1367,9 @@
               1481,
               1566
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2600,
+            "feasible_states": 2490,
+            "message_entries": 65
           },
           {
             "bag": [
@@ -1377,9 +1377,9 @@
               1566,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 325,
+            "feasible_states": 325,
+            "message_entries": 25
           },
           {
             "bag": [
@@ -1388,7 +1388,7 @@
               1884
             ],
             "enumerated_states": 480,
-            "feasible_states": 346,
+            "feasible_states": 462,
             "message_entries": 60
           },
           {
@@ -1398,7 +1398,7 @@
               1884
             ],
             "enumerated_states": 300,
-            "feasible_states": 222,
+            "feasible_states": 280,
             "message_entries": 50
           },
           {
@@ -1408,8 +1408,8 @@
               1909
             ],
             "enumerated_states": 500,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 450,
+            "message_entries": 50
           },
           {
             "bag": [
@@ -1418,9 +1418,9 @@
               1729,
               1909
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1000,
+            "feasible_states": 920,
+            "message_entries": 200
           },
           {
             "bag": [
@@ -1429,9 +1429,9 @@
               1909,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1000,
+            "feasible_states": 900,
+            "message_entries": 250
           },
           {
             "bag": [
@@ -1441,7 +1441,7 @@
               2290
             ],
             "enumerated_states": 1800,
-            "feasible_states": 1665,
+            "feasible_states": 1800,
             "message_entries": 450
           },
           {
@@ -1452,7 +1452,7 @@
               2468
             ],
             "enumerated_states": 2880,
-            "feasible_states": 1776,
+            "feasible_states": 2720,
             "message_entries": 720
           },
           {
@@ -1463,7 +1463,7 @@
               2740
             ],
             "enumerated_states": 3360,
-            "feasible_states": 2940,
+            "feasible_states": 3300,
             "message_entries": 480
           },
           {
@@ -1474,7 +1474,7 @@
               2740
             ],
             "enumerated_states": 4320,
-            "feasible_states": 3600,
+            "feasible_states": 4140,
             "message_entries": 540
           },
           {
@@ -1485,7 +1485,7 @@
               2745
             ],
             "enumerated_states": 7560,
-            "feasible_states": 5850,
+            "feasible_states": 7290,
             "message_entries": 1260
           },
           {
@@ -1496,8 +1496,8 @@
               2510
             ],
             "enumerated_states": 1350,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 1080,
+            "message_entries": 225
           },
           {
             "bag": [
@@ -1506,9 +1506,9 @@
               2505,
               2510
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1350,
+            "feasible_states": 1305,
+            "message_entries": 270
           },
           {
             "bag": [
@@ -1517,9 +1517,9 @@
               2510,
               2633
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1080,
+            "feasible_states": 972,
+            "message_entries": 216
           },
           {
             "bag": [
@@ -1529,8 +1529,8 @@
               2757
             ],
             "enumerated_states": 1056,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 900,
+            "message_entries": 264
           },
           {
             "bag": [
@@ -1540,7 +1540,7 @@
               3146
             ],
             "enumerated_states": 512,
-            "feasible_states": 280,
+            "feasible_states": 404,
             "message_entries": 128
           },
           {
@@ -1551,8 +1551,8 @@
               3146
             ],
             "enumerated_states": 768,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 688,
+            "message_entries": 96
           },
           {
             "bag": [
@@ -1561,9 +1561,9 @@
               3146,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 672,
+            "feasible_states": 672,
+            "message_entries": 168
           },
           {
             "bag": [
@@ -1573,7 +1573,7 @@
               3389
             ],
             "enumerated_states": 2100,
-            "feasible_states": 1284,
+            "feasible_states": 1842,
             "message_entries": 420
           },
           {
@@ -1582,7 +1582,7 @@
               9667
             ],
             "enumerated_states": 12,
-            "feasible_states": 7,
+            "feasible_states": 10,
             "message_entries": 6
           },
           {
@@ -1592,7 +1592,7 @@
               3832
             ],
             "enumerated_states": 96,
-            "feasible_states": 62,
+            "feasible_states": 92,
             "message_entries": 16
           },
           {
@@ -1601,8 +1601,8 @@
               9659
             ],
             "enumerated_states": 16,
-            "feasible_states": 0,
-            "message_entries": 0
+            "feasible_states": 12,
+            "message_entries": 4
           },
           {
             "bag": [
@@ -1610,9 +1610,9 @@
               3679,
               3832
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 96,
+            "feasible_states": 96,
+            "message_entries": 24
           },
           {
             "bag": [
@@ -1620,9 +1620,9 @@
               3653,
               3679
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 216,
+            "feasible_states": 192,
+            "message_entries": 54
           },
           {
             "bag": [
@@ -1630,9 +1630,9 @@
               3544,
               3679
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 432,
+            "feasible_states": 432,
+            "message_entries": 72
           },
           {
             "bag": [
@@ -1640,9 +1640,9 @@
               3530,
               3544
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 360,
+            "feasible_states": 332,
+            "message_entries": 40
           },
           {
             "bag": [
@@ -1650,9 +1650,9 @@
               3464,
               3544
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 320,
+            "feasible_states": 305,
+            "message_entries": 40
           },
           {
             "bag": [
@@ -1660,9 +1660,9 @@
               3349,
               3464
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 400,
+            "feasible_states": 374,
+            "message_entries": 80
           },
           {
             "bag": [
@@ -1670,9 +1670,9 @@
               3389,
               3464
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 560,
+            "feasible_states": 560,
+            "message_entries": 70
           },
           {
             "bag": [
@@ -1681,9 +1681,9 @@
               3167,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 4620,
+            "feasible_states": 4620,
+            "message_entries": 462
           },
           {
             "bag": [
@@ -1692,9 +1692,9 @@
               2757,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1848,
+            "feasible_states": 1820,
+            "message_entries": 308
           },
           {
             "bag": [
@@ -1702,9 +1702,9 @@
               2757,
               3389
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 308,
+            "feasible_states": 308,
+            "message_entries": 44
           },
           {
             "bag": [
@@ -1713,9 +1713,9 @@
               2633,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 2376,
+            "feasible_states": 2376,
+            "message_entries": 594
           },
           {
             "bag": [
@@ -1724,9 +1724,9 @@
               2745,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 8316,
+            "feasible_states": 8217,
+            "message_entries": 1386
           },
           {
             "bag": [
@@ -1734,9 +1734,9 @@
               2745,
               2757
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1386,
+            "feasible_states": 1287,
+            "message_entries": 126
           },
           {
             "bag": [
@@ -1744,9 +1744,9 @@
               2290,
               2745
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 1260,
+            "feasible_states": 1260,
+            "message_entries": 90
           },
           {
             "bag": [
@@ -1754,9 +1754,9 @@
               1929,
               2290
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 450,
+            "feasible_states": 450,
+            "message_entries": 50
           },
           {
             "bag": [
@@ -1764,36 +1764,36 @@
               1909,
               1929
             ],
-            "enumerated_states": 0,
-            "feasible_states": 0,
-            "message_entries": 0
+            "enumerated_states": 250,
+            "feasible_states": 250,
+            "message_entries": 1
           }
         ],
-        "enumerated_states": 50786,
-        "feasible_states": 26464,
-        "message_entries": 5904,
-        "unique_cost_requests": 2683
+        "enumerated_states": 218899,
+        "feasible_states": 211519,
+        "message_entries": 30866,
+        "unique_cost_requests": 4687
       },
       "objectives": {
         "additive": {
-          "feasible": false,
-          "mapping_digest": null,
-          "mapping_size": 0,
-          "value": null,
-          "value_hex": null,
-          "witness_count": 0,
-          "witness_digest": null,
-          "witness_points": 0
+          "feasible": true,
+          "mapping_digest": "6575e61621235636a5f7541578b89df71239214776dc647ab8573d276fb676e8",
+          "mapping_size": 70,
+          "value": 30.906025429593214,
+          "value_hex": "0x1.ee7f14855727cp+4",
+          "witness_count": 103,
+          "witness_digest": "538429bd8f87de967fe17d088bf7d8b6ae05169b53e394f9d126110c41211b2e",
+          "witness_points": 10242
         },
         "bottleneck": {
-          "feasible": false,
-          "mapping_digest": null,
-          "mapping_size": 0,
-          "value": null,
-          "value_hex": null,
-          "witness_count": 0,
-          "witness_digest": null,
-          "witness_points": 0
+          "feasible": true,
+          "mapping_digest": "360f460683a66561fde97bc2abd2cffb31f9c3e14ed28af56dc8579acd12d50f",
+          "mapping_size": 70,
+          "value": 5.376119686460603,
+          "value_hex": "0x1.5812584e2eb96p+2",
+          "witness_count": 103,
+          "witness_digest": "ded17b9cbd4537133933e411047ebc6cd39cb3a29061940e78150516204ded92",
+          "witness_points": 11319
         }
       },
       "repeat": 2,
@@ -1809,18 +1809,18 @@
         "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e3.txt",
         "vertices": 371
       },
-      "timestamp_utc": "2026-07-04T19:40:06.937452+00:00",
+      "timestamp_utc": "2026-07-05T09:21:29.783736+00:00",
       "timings_seconds": {
-        "candidate_generation": 0.027095300145447254,
-        "cost_creation": 0.10512620001100004,
-        "cost_factory": 0.06255579995922744,
-        "dynamic_programming": 2.6721431999467313,
-        "load_source": 0.4212208997923881,
-        "load_target": 0.8266251999884844,
-        "materialize_additive": 2.800021320581436e-06,
-        "materialize_bottleneck": 9.0012326836586e-07,
-        "source_decomposition": 0.010674499906599522,
-        "total": 4.125473599880934
+        "candidate_generation": 0.025710999965667725,
+        "cost_creation": 0.09907710016705096,
+        "cost_factory": 0.061691700015217066,
+        "dynamic_programming": 4.960669300053269,
+        "load_source": 0.43007569992914796,
+        "load_target": 0.8260908999945968,
+        "materialize_additive": 0.0008898999076336622,
+        "materialize_bottleneck": 0.0006405999884009361,
+        "source_decomposition": 0.0104093998670578,
+        "total": 6.415289500029758
       }
     }
   ],
