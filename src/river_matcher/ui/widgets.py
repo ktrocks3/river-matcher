@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QLocale, Qt, Signal
 from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QFormLayout, QLabel, QSpinBox, QStackedWidget, QVBoxLayout, QWidget
 
 from river_matcher.matcher import MatchedEdge
@@ -132,27 +132,11 @@ class PolylineIndex:
             cumulative_starts.append(cumulative[:-1])
 
         if not starts:
-            return cls(
-                np.empty((0, 2), dtype=np.float64),
-                np.empty((0, 2), dtype=np.float64),
-                np.empty(0, dtype=np.float64),
-                np.empty(0, dtype=np.float64),
-                np.empty(0, dtype=np.int64),
-                np.empty(0, dtype=np.float64),
-                {},
-                {},
-            )
+            return cls(np.empty((0, 2), dtype=np.float64), np.empty((0, 2), dtype=np.float64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64),
+                np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), {}, {})
 
-        return cls(
-            np.concatenate(starts),
-            np.concatenate(vectors),
-            np.concatenate(squared_lengths),
-            np.concatenate(lengths),
-            np.concatenate(path_ids),
-            np.concatenate(cumulative_starts),
-            totals,
-            retained,
-        )
+        return cls(np.concatenate(starts), np.concatenate(vectors), np.concatenate(squared_lengths), np.concatenate(lengths), np.concatenate(path_ids),
+            np.concatenate(cumulative_starts), totals, retained)
 
     def nearest(self, x: float, y: float) -> tuple[int, float, float] | None:
         if len(self.starts) == 0:
@@ -226,11 +210,7 @@ class GraphView(pg.PlotWidget):
     def set_graph(self, graph: JunctionGraph, *, title: str) -> None:
         self.graph = graph
         self.setTitle(title)
-        edge_polylines = {
-            int(edge.id): points
-            for edge in graph.edges
-            if (points := _as_points(edge.polyline)) is not None
-        }
+        edge_polylines = {int(edge.id): points for edge in graph.edges if (points := _as_points(edge.polyline)) is not None}
         self._graph_index = PolylineIndex.build(edge_polylines)
         self._positions = _vertex_positions(graph)
         ordered = sorted(self._positions)
@@ -249,11 +229,7 @@ class GraphView(pg.PlotWidget):
         self.enableAutoRange()
 
     def set_witnesses(self, edges: Iterable[MatchedEdge]) -> None:
-        witnesses = {
-            int(edge.edge_id): points
-            for edge in edges
-            if (points := _as_points(edge.witness)) is not None
-        }
+        witnesses = {int(edge.edge_id): points for edge in edges if (points := _as_points(edge.witness)) is not None}
         self._witness_index = PolylineIndex.build(witnesses)
         x, y = _joined_path(witnesses.values())
         self._witness_item.setData(x, y, connect="finite")
@@ -338,38 +314,18 @@ class OptionSpec:
     decimals: int = 3
 
 
-_COST_OPTIONS: dict[str, tuple[OptionSpec, ...]] = {
-    "relative_length_error": (),
-    "log_length_distortion": (),
-    "hausdorff_distance": (
-        OptionSpec("rho", "Path corridor radius", "float", 10.0),
-        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-    ),
-    "mean_distance_tangent": (
-        OptionSpec("rho", "Path corridor radius", "float", 10.0),
-        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
-        OptionSpec("tangent_weight", "Tangent weight", "float", 1.0),
-    ),
-    "symmetric_corridor_exceedance": (
-        OptionSpec("rho", "Path corridor radius", "float", 10.0),
-        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
-        OptionSpec("corridor_radius", "Exceedance radius", "float", 10.0, 1e-9),
-    ),
-    "discrete_frechet_distance": (
-        OptionSpec("rho", "Path corridor radius", "float", 10.0),
-        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
-    ),
-    "dynamic_time_warping_distance": (
-        OptionSpec("rho", "Path corridor radius", "float", 10.0),
-        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-        OptionSpec("curve_samples", "Curve samples", "int", 80, 2, 100_000),
-        OptionSpec("warping_window", "Warping window", "int", 8, 1, 100_000),
-        OptionSpec("normalize", "Normalize", "bool", True),
-    ),
-}
+_COST_OPTIONS: dict[str, tuple[OptionSpec, ...]] = {"relative_length_error": (), "log_length_distortion": (),
+    "hausdorff_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),),
+    "mean_distance_tangent": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+                              OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000), OptionSpec("tangent_weight", "Tangent weight", "float", 1.0),),
+    "symmetric_corridor_exceedance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+                                      OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
+                                      OptionSpec("corridor_radius", "Exceedance radius", "float", 10.0, 1e-9),),
+    "discrete_frechet_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+                                  OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),),
+    "dynamic_time_warping_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+                                      OptionSpec("curve_samples", "Curve samples", "int", 80, 2, 100_000), OptionSpec("warping_window", "Warping window", "int", 8, 1, 100_000),
+                                      OptionSpec("normalize", "Normalize", "bool", True),)}
 
 
 class CostOptionsWidget(QWidget):
@@ -378,7 +334,6 @@ class CostOptionsWidget(QWidget):
         self._stack = QStackedWidget()
         self._pages: dict[str, QWidget] = {}
         self._fields: dict[str, dict[str, QWidget]] = {}
-        self._last_candidate_rho = 10.0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -404,6 +359,7 @@ class CostOptionsWidget(QWidget):
                     widget = check
                 else:
                     double_spin = QDoubleSpinBox()
+                    double_spin.setLocale(QLocale.c())
                     double_spin.setDecimals(spec.decimals)
                     double_spin.setRange(float(spec.minimum), float(spec.maximum))
                     double_spin.setValue(float(spec.default))
@@ -420,15 +376,6 @@ class CostOptionsWidget(QWidget):
         page = self._pages.get(cost_name)
         if page is not None:
             self._stack.setCurrentWidget(page)
-
-    def set_candidate_rho(self, value: float) -> None:
-        previous = self._last_candidate_rho
-        self._last_candidate_rho = float(value)
-
-        for fields in self._fields.values():
-            widget = fields.get("rho")
-            if isinstance(widget, QDoubleSpinBox) and math.isclose(widget.value(), previous):
-                widget.setValue(float(value))
 
     def options_for(self, cost_name: str) -> dict[str, object]:
         options: dict[str, object] = {}
