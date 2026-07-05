@@ -1,0 +1,96 @@
+{
+  "suite_name": "confirmed_pairs",
+  "output_dir": "experiment_results",
+  "defaults": {
+    "candidate_rho": 10.0,
+    "top_k": 25
+  },
+  "pairs": [
+    {
+      "id": "1998e5_to_1998e3",
+      "source": "../Thesis/2-Data/GraphExport/1998e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1998e3.txt",
+      "category": "same_year_scale_change",
+      "notes": "Same-year scale comparison for 1998."
+    },
+    {
+      "id": "2014e5_to_2014e3",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/2014e3.txt",
+      "category": "same_year_scale_change",
+      "notes": "Same-year scale comparison for 2014."
+    },
+    {
+      "id": "2014e5_to_1955e3",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e3.txt",
+      "category": "cross_year_and_scale_change",
+      "notes": "Cross-year comparison with a denser target."
+    }
+  ],
+  "costs": [
+    {
+      "name": "relative_length_error",
+      "options": {},
+      "visual_range": [
+        0.0,
+        1.0
+      ],
+      "label": "Relative length error"
+    },
+    {
+      "name": "log_length_distortion",
+      "options": {},
+      "visual_range": [
+        0.0,
+        1.0986122886681098
+      ],
+      "label": "Absolute log-length distortion"
+    },
+    {
+      "name": "mean_distance_tangent",
+      "options": {},
+      "visual_range": [
+        0.0,
+        6.0
+      ],
+      "label": "Mean distance and tangent mismatch"
+    },
+    {
+      "name": "hausdorff_distance",
+      "options": {},
+      "visual_range": [
+        0.0,
+        30.0
+      ],
+      "label": "Hausdorff distance"
+    },
+    {
+      "name": "symmetric_corridor_exceedance",
+      "options": {},
+      "visual_range": [
+        0.0,
+        1.0
+      ],
+      "label": "Symmetric corridor exceedance"
+    },
+    {
+      "name": "discrete_frechet_distance",
+      "options": {},
+      "visual_range": [
+        0.0,
+        30.0
+      ],
+      "label": "Discrete Fréchet distance"
+    },
+    {
+      "name": "dynamic_time_warping_distance",
+      "options": {},
+      "visual_range": [
+        0.0,
+        15.0
+      ],
+      "label": "Dynamic time warping distance"
+    }
+  ]
+}

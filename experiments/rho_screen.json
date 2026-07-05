@@ -1,0 +1,35 @@
+{
+  "suite_name": "rho_screen_12_5",
+  "output_dir": "experiment_results",
+  "defaults": {
+    "candidate_rho": 12.5,
+    "top_k": 25
+  },
+  "pairs": [
+    {
+      "id": "2014e5_to_1955e5_rho12_5",
+      "source": "../Thesis/2-Data/GraphExport/2014e5.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e5.txt",
+      "category": "cross_year_same_scale",
+      "notes": "Retry after two empty domains at rho=10."
+    },
+    {
+      "id": "1998e3_to_1955e3_rho12_5",
+      "source": "../Thesis/2-Data/GraphExport/1998e3.txt",
+      "target": "../Thesis/2-Data/GraphExport/1955e3.txt",
+      "category": "cross_year_dense_stress",
+      "notes": "Cautious retry after two empty domains at rho=10."
+    }
+  ],
+  "costs": [
+    {
+      "name": "relative_length_error",
+      "options": {},
+      "visual_range": [
+        0.0,
+        1.0
+      ],
+      "label": "Relative length error"
+    }
+  ]
+}
