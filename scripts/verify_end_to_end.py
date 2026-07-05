@@ -63,15 +63,9 @@ def _candidate_report(candidate_sets: Mapping[int, Sequence[int]]) -> dict[str, 
     ordered = [(int(vertex), [int(candidate) for candidate in candidate_sets[vertex]]) for vertex in sorted(candidate_sets)]
     sizes = np.asarray([len(candidates) for _, candidates in ordered], dtype=np.int64)
 
-    return {
-        "vertices": int(len(ordered)),
-        "empty_domains": int(np.count_nonzero(sizes == 0)),
-        "total_candidates": int(sizes.sum()),
-        "minimum_candidates": int(sizes.min()) if len(sizes) else 0,
-        "median_candidates": float(np.median(sizes)) if len(sizes) else 0.0,
-        "maximum_candidates": int(sizes.max()) if len(sizes) else 0,
-        "digest": _json_digest(ordered),
-    }
+    return {"vertices": int(len(ordered)), "empty_domains": int(np.count_nonzero(sizes == 0)), "total_candidates": int(sizes.sum()),
+            "minimum_candidates": int(sizes.min()) if len(sizes) else 0, "median_candidates": float(np.median(sizes)) if len(sizes) else 0.0,
+            "maximum_candidates": int(sizes.max()) if len(sizes) else 0, "digest": _json_digest(ordered)}
 
 
 def _decomposition_report(decomposition: SourceDecomposition, candidate_sets: Mapping[int, Sequence[int]]) -> dict[str, object]:
@@ -82,68 +76,27 @@ def _decomposition_report(decomposition: SourceDecomposition, candidate_sets: Ma
         plan = decomposition.bag_plans[bag]
         states = math.prod(len(candidate_sets[vertex]) for vertex in plan.variables)
         estimated_states += states
-        bag_rows.append(
-            {
-                "bag": list(plan.variables),
-                "candidate_product": states,
-                "owned_edges": len(plan.owned_edge_positions),
-                "children": len(plan.child_positions),
-            },
-        )
+        bag_rows.append({"bag": list(plan.variables), "candidate_product": states, "owned_edges": len(plan.owned_edge_positions), "children": len(plan.child_positions)})
 
-    structure = {
-        "root": sorted(decomposition.root),
-        "bags": [sorted(bag) for bag in decomposition.bags],
-        "tree_edges": [[sorted(first), sorted(second)] for first, second in decomposition.tree_edges],
-        "owned_edges": {
-            ",".join(map(str, sorted(bag))): [list(edge) for edge in decomposition.owned_edges[bag]]
-            for bag in decomposition.bags
-        },
-    }
+    structure = {"root": sorted(decomposition.root), "bags": [sorted(bag) for bag in decomposition.bags],
+                 "tree_edges": [[sorted(first), sorted(second)] for first, second in decomposition.tree_edges],
+                 "owned_edges": {",".join(map(str, sorted(bag))): [list(edge) for edge in decomposition.owned_edges[bag]] for bag in decomposition.bags}}
 
-    return {
-        "width": decomposition.width,
-        "maximum_bag_size": decomposition.maximum_bag_size,
-        "bag_count": decomposition.bag_count,
-        "heuristic": decomposition.heuristic.value,
-        "minimum_fill_width": decomposition.minimum_fill_width,
-        "minimum_degree_width": decomposition.minimum_degree_width,
-        "estimated_state_upper_bound": estimated_states,
-        "largest_candidate_products": sorted(bag_rows, key=lambda row: int(row["candidate_product"]), reverse=True)[:10],
-        "digest": _json_digest(structure),
-    }
+    return {"width": decomposition.width, "maximum_bag_size": decomposition.maximum_bag_size, "bag_count": decomposition.bag_count, "heuristic": decomposition.heuristic.value,
+            "minimum_fill_width": decomposition.minimum_fill_width, "minimum_degree_width": decomposition.minimum_degree_width, "estimated_state_upper_bound": estimated_states,
+            "largest_candidate_products": sorted(bag_rows, key=lambda row: int(row["candidate_product"]), reverse=True)[:10], "digest": _json_digest(structure)}
 
 
 def _dp_report(result: BothObjectiveResult) -> dict[str, object]:
-    return {
-        "enumerated_states": result.statistics.enumerated_states,
-        "feasible_states": result.statistics.feasible_states,
-        "message_entries": result.statistics.message_entries,
-        "unique_cost_requests": result.statistics.unique_cost_requests,
-        "bags": [
-            {
-                "bag": sorted(statistics.bag),
-                "enumerated_states": statistics.enumerated_states,
-                "feasible_states": statistics.feasible_states,
-                "message_entries": statistics.message_entries,
-            }
-            for statistics in result.statistics.bags
-        ],
-    }
+    return {"enumerated_states": result.statistics.enumerated_states, "feasible_states": result.statistics.feasible_states, "message_entries": result.statistics.message_entries,
+            "unique_cost_requests": result.statistics.unique_cost_requests, "bags": [
+            {"bag": sorted(statistics.bag), "enumerated_states": statistics.enumerated_states, "feasible_states": statistics.feasible_states,
+             "message_entries": statistics.message_entries} for statistics in result.statistics.bags]}
 
 
 def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, solution: DPSolution | None) -> dict[str, object]:
     if solution is None:
-        return {
-            "feasible": False,
-            "value": None,
-            "value_hex": None,
-            "mapping_size": 0,
-            "mapping_digest": None,
-            "witness_count": 0,
-            "witness_points": 0,
-            "witness_digest": None,
-        }
+        return {"feasible": False, "value": None, "value_hex": None, "mapping_size": 0, "mapping_digest": None, "witness_count": 0, "witness_points": 0, "witness_digest": None}
 
     mapping = {int(source_vertex): int(target_vertex) for source_vertex, target_vertex in solution.mapping.items()}
     mapping_rows = sorted(mapping.items())
@@ -180,159 +133,97 @@ def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, soluti
     realized_value = sum(local_values) if solution.objective is Objective.ADDITIVE else max(local_values, default=0.0)
 
     if not math.isclose(realized_value, solution.value, rel_tol=1e-10, abs_tol=1e-12):
-        raise RuntimeError(
-            f"Recovered {solution.objective.value} value differs from the DP value: DP={solution.value}, realized={realized_value}.",
-        )
+        raise RuntimeError(f"Recovered {solution.objective.value} value differs from the DP value: DP={solution.value}, realized={realized_value}.")
 
-    return {
-        "feasible": True,
-        "value": solution.value,
-        "value_hex": solution.value.hex(),
-        "mapping_size": len(mapping),
-        "mapping_digest": _json_digest(mapping_rows),
-        "witness_count": witness_count,
-        "witness_points": witness_points,
-        "witness_digest": witness_hasher.hexdigest(),
-    }
+    return {"feasible": True, "value": solution.value, "value_hex": solution.value.hex(), "mapping_size": len(mapping), "mapping_digest": _json_digest(mapping_rows),
+            "witness_count": witness_count, "witness_points": witness_points, "witness_digest": witness_hasher.hexdigest()}
 
 
 def _git_commit() -> str | None:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         return None
 
 
-def _run_once(
-    source_path: Path,
-    target_path: Path,
-    cost_name: CostName,
-    candidate_rho: float,
-    top_k: int,
-    cost_options: Mapping[str, object],
-    repeat: int,
-) -> dict[str, object]:
+def _run_once(source_path: Path, target_path: Path, cost_name: CostName, candidate_rho: float, top_k: int, cost_options: Mapping[str, object], repeat: int, *, preflight_only: bool,
+              max_estimated_states: int | None) -> dict[str, object]:
     timings: dict[str, float] = {}
     total_started = time.perf_counter()
 
     source = _timed("load_source", lambda: load_junction_graph(source_path), timings)
     target = _timed("load_target", lambda: load_junction_graph(target_path), timings)
-    candidate_sets = _timed(
-        "candidate_generation",
-        lambda: compute_candidate_sets(source, target, rho=candidate_rho, top_k=top_k),
-        timings,
-    )
+    candidate_sets = _timed("candidate_generation", lambda: compute_candidate_sets(source, target, rho=candidate_rho, top_k=top_k), timings)
     decomposition = _timed("source_decomposition", lambda: build_source_decomposition(source), timings)
+
+    candidate_report = _candidate_report(candidate_sets)
+    decomposition_report = _decomposition_report(decomposition, candidate_sets)
+    estimated_states = int(decomposition_report["estimated_state_upper_bound"])
+    limit_exceeded = (max_estimated_states is not None and estimated_states > max_estimated_states)
+    run_dp = not preflight_only and not limit_exceeded
+
+    run: dict[str, object] = {"repeat": repeat, "timestamp_utc": datetime.now(UTC).isoformat(),
+                              "source": {"path": str(source_path.resolve()), "name": source.name, "vertices": len(source.vertices), "edges": len(source.edges)},
+                              "target": {"path": str(target_path.resolve()), "name": target.name, "vertices": len(target.vertices), "edges": len(target.edges)},
+                              "cost": {"name": cost_name.value, "options": dict(cost_options)}, "candidate_parameters": {"rho": candidate_rho, "top_k": top_k},
+                              "execution": {"preflight_only": preflight_only, "max_estimated_states": max_estimated_states, "estimated_state_limit_exceeded": limit_exceeded,
+                                            "dynamic_programming_run": run_dp,
+                                            "skip_reason": ("preflight_only" if preflight_only else ("estimated_state_limit_exceeded" if limit_exceeded else None))},
+                              "candidates": candidate_report, "decomposition": decomposition_report, "dynamic_programming": None, "objectives": None, "timings_seconds": timings}
+
+    if not run_dp:
+        timings["total"] = time.perf_counter() - total_started
+        return run
+
     factory = _timed("cost_factory", lambda: CostFactory(source, target), timings)
     edge_cost = _timed("cost_creation", lambda: factory.create(cost_name, **dict(cost_options)), timings)
-    dp_result = _timed(
-        "dynamic_programming",
-        lambda: solve_tree_dp_both(decomposition, candidate_sets, edge_cost),
-        timings,
-    )
-    additive = _timed(
-        "materialize_additive",
-        lambda: _materialize_solution(source, edge_cost, dp_result.additive),
-        timings,
-    )
-    bottleneck = _timed(
-        "materialize_bottleneck",
-        lambda: _materialize_solution(source, edge_cost, dp_result.bottleneck),
-        timings,
-    )
+    dp_result = _timed("dynamic_programming", lambda: solve_tree_dp_both(decomposition, candidate_sets, edge_cost), timings)
+    additive = _timed("materialize_additive", lambda: _materialize_solution(source, edge_cost, dp_result.additive), timings)
+    bottleneck = _timed("materialize_bottleneck", lambda: _materialize_solution(source, edge_cost, dp_result.bottleneck), timings)
     timings["total"] = time.perf_counter() - total_started
 
-    return {
-        "repeat": repeat,
-        "timestamp_utc": datetime.now(UTC).isoformat(),
-        "source": {
-            "path": str(source_path.resolve()),
-            "name": source.name,
-            "vertices": len(source.vertices),
-            "edges": len(source.edges),
-        },
-        "target": {
-            "path": str(target_path.resolve()),
-            "name": target.name,
-            "vertices": len(target.vertices),
-            "edges": len(target.edges),
-        },
-        "cost": {
-            "name": edge_cost.name.value,
-            "options": dict(cost_options),
-        },
-        "candidate_parameters": {
-            "rho": candidate_rho,
-            "top_k": top_k,
-        },
-        "candidates": _candidate_report(candidate_sets),
-        "decomposition": _decomposition_report(decomposition, candidate_sets),
-        "dynamic_programming": _dp_report(dp_result),
-        "objectives": {
-            "additive": additive,
-            "bottleneck": bottleneck,
-        },
-        "timings_seconds": timings,
-    }
+    run["dynamic_programming"] = _dp_report(dp_result)
+    run["objectives"] = {"additive": additive, "bottleneck": bottleneck}
+
+    return run
 
 
 def _stable_signature(run: Mapping[str, Any]) -> dict[str, object]:
-    objectives = run["objectives"]
-    assert isinstance(objectives, Mapping)
-
-    return {
-        "source": run["source"],
-        "target": run["target"],
-        "cost": run["cost"],
-        "candidate_parameters": run["candidate_parameters"],
-        "candidates": run["candidates"],
-        "decomposition": run["decomposition"],
-        "dynamic_programming": run["dynamic_programming"],
-        "objectives": objectives,
-    }
+    return {"source": run["source"], "target": run["target"], "cost": run["cost"], "candidate_parameters": run["candidate_parameters"], "execution": run["execution"],
+            "candidates": run["candidates"], "decomposition": run["decomposition"], "dynamic_programming": run["dynamic_programming"], "objectives": run["objectives"]}
 
 
 def _print_run(run: Mapping[str, Any]) -> None:
     source = run["source"]
     target = run["target"]
+    execution = run["execution"]
     candidates = run["candidates"]
     decomposition = run["decomposition"]
-    dp = run["dynamic_programming"]
-    objectives = run["objectives"]
     timings = run["timings_seconds"]
 
     print(f"\n=== repeat {run['repeat']} ===")
-    print(
-        f"{source['name']} ({source['vertices']} V, {source['edges']} E) -> "
-        f"{target['name']} ({target['vertices']} V, {target['edges']} E)",
-    )
-    print(
-        "candidates: "
-        f"empty={candidates['empty_domains']}, total={candidates['total_candidates']}, "
-        f"min={candidates['minimum_candidates']}, median={candidates['median_candidates']}, "
-        f"max={candidates['maximum_candidates']}",
-    )
-    print(
-        "decomposition: "
-        f"width={decomposition['width']}, bags={decomposition['bag_count']}, "
-        f"estimated states={decomposition['estimated_state_upper_bound']}",
-    )
-    print(
-        "DP: "
-        f"enumerated={dp['enumerated_states']}, feasible={dp['feasible_states']}, "
-        f"messages={dp['message_entries']}, unique costs={dp['unique_cost_requests']}",
-    )
+    print(f"{source['name']} ({source['vertices']} V, {source['edges']} E) -> {target['name']} ({target['vertices']} V, {target['edges']} E)")
+    print(f"candidates: empty={candidates['empty_domains']}, total={candidates['total_candidates']}, min={candidates['minimum_candidates']}, "
+          f"median={candidates['median_candidates']}, max={candidates['maximum_candidates']}")
+    print(f"decomposition: width={decomposition['width']}, bags={decomposition['bag_count']}, estimated states={decomposition['estimated_state_upper_bound']}")
 
-    for objective in ("additive", "bottleneck"):
-        result = objectives[objective]
-        print(
-            f"{objective}: feasible={result['feasible']}, value={result['value']}, "
-            f"mapping={result['mapping_size']}, witnesses={result['witness_count']}",
-        )
+    print("largest bag candidate products:")
+
+    for row in decomposition["largest_candidate_products"][:5]:
+        print(f"  bag={tuple(row['bag'])}, states={row['candidate_product']}, owned_edges={row['owned_edges']}, children={row['children']}")
+
+    if not execution["dynamic_programming_run"]:
+        print(f"DP skipped: {execution['skip_reason']}")
+
+        if execution["estimated_state_limit_exceeded"]:
+            print("state limit: {execution['max_estimated_states']}")
+    else:
+        dp = run["dynamic_programming"]
+        objectives = run["objectives"]
+        print(f"DP: enumerated={dp['enumerated_states']}, feasible={dp['feasible_states']}, messages={dp['message_entries']}, unique costs={dp['unique_cost_requests']}")
+        for objective in ("additive", "bottleneck"):
+            result = objectives[objective]
+            print(f"{objective}: feasible={result['feasible']}, value={result['value']}, mapping={result['mapping_size']}, witnesses={result['witness_count']}")
 
     print("timings:")
 
@@ -344,16 +235,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run and verify the migrated matcher on one production graph pair.")
     parser.add_argument("source", type=Path, help="Source TopoTide .txt graph.")
     parser.add_argument("target", type=Path, help="Target TopoTide .txt graph.")
-    parser.add_argument(
-        "--cost",
-        choices=tuple(cost.value for cost in CostName),
-        default=CostName.RELATIVE_LENGTH_ERROR.value,
-    )
+    parser.add_argument("--cost", choices=tuple(cost.value for cost in CostName), default=CostName.RELATIVE_LENGTH_ERROR.value)
     parser.add_argument("--candidate-rho", type=float, default=10.0)
     parser.add_argument("--top-k", type=int, default=25)
     parser.add_argument("--cost-option", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--preflight-only", action="store_true", help=("Load graphs, generate candidates, and build the decomposition "
+                                                                       "without constructing a cost or running dynamic programming."))
+    parser.add_argument("--max-estimated-states", type=int, help="Skip dynamic programming when the sum of bag candidate products exceeds this limit.")
     return parser
 
 
@@ -383,39 +273,37 @@ def main() -> int:
     runs: list[dict[str, object]] = []
 
     for repeat in range(1, arguments.repeats + 1):
-        run = _run_once(
-            arguments.source,
-            arguments.target,
-            cost_name,
-            arguments.candidate_rho,
-            arguments.top_k,
-            cost_options,
-            repeat,
-        )
+        run = _run_once(arguments.source, arguments.target, cost_name, arguments.candidate_rho, arguments.top_k, cost_options, repeat, preflight_only=arguments.preflight_only,
+                        max_estimated_states=arguments.max_estimated_states)
         runs.append(run)
         _print_run(run)
 
     baseline = _stable_signature(runs[0])
     reproducible = all(_stable_signature(run) == baseline for run in runs[1:])
-    output = arguments.output or Path("reports") / (
-        f"end_to_end_{arguments.source.stem}_to_{arguments.target.stem}_{cost_name.value}.json"
-    )
-    report = {
-        "schema_version": 1,
-        "created_utc": datetime.now(UTC).isoformat(),
-        "python": sys.version,
-        "platform": platform.platform(),
-        "git_commit": _git_commit(),
-        "reproducible": reproducible,
-        "runs": runs,
-    }
+    limit_exceeded = any(bool(run["execution"]["estimated_state_limit_exceeded"]) for run in runs)
+    if arguments.preflight_only:
+        report_suffix = "_preflight"
+    elif limit_exceeded:
+        report_suffix = "_blocked"
+    else:
+        report_suffix = ""
+
+    output = arguments.output or Path("reports") / f"end_to_end_{arguments.source.stem}_to_{arguments.target.stem}_{cost_name.value}{report_suffix}.json"
+    report = {"schema_version": 2, "created_utc": datetime.now(UTC).isoformat(), "python": sys.version, "platform": platform.platform(), "git_commit": _git_commit(),
+              "preflight_only": arguments.preflight_only, "max_estimated_states": arguments.max_estimated_states, "reproducible": reproducible, "runs": runs}
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
 
     print(f"\nreproducible across {len(runs)} run(s): {reproducible}")
     print(f"report: {output.resolve()}")
-    return 0 if reproducible else 2
+    if not reproducible:
+        return 2
+
+    if limit_exceeded and not arguments.preflight_only:
+        return 3
+
+    return 0
 
 
 if __name__ == "__main__":

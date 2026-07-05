@@ -109,3 +109,7 @@ def test_main_rejects_nonpositive_top_k() -> None:
         cli.main(["source.txt", "target.txt", "--cost", "relative_length_error", "--top-k", "0"])
 
     assert error.value.code == 2
+
+def test_module_entry_point_imports_cli_main() -> None:
+    from river_matcher import __main__
+    assert __main__.main is cli.main
