@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from river_matcher.costs import CostFactory, CostName, MeanDistanceTangent
-from river_matcher.costs.mean_distance_tangent import _directed_mean_distance_tangent
+from river_matcher.costs.mean_distance_tangent import _directed_mean_distance_tangent, _sample_prepared_curve
+from river_matcher.geometry import prepare_polyline_segments
 from river_matcher.models import JunctionEdge, JunctionGraph
 
 type CostRequest = tuple[int, int, int, int, int]
@@ -259,3 +260,4 @@ def test_clear_cache_removes_local_cost_state() -> None:
     assert cost._witness_cache == {}
     assert cost._source_sample_cache == {}
     assert cost._source_prepared_cache == {}
+

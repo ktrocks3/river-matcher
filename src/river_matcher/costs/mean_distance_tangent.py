@@ -6,48 +6,70 @@ import numpy as np
 from numba import njit
 
 from river_matcher.costs.base import BaseEdgeCost, CostName, CostRequest, CostResources
-from river_matcher.geometry import PreparedPolyline, XYArray, prepare_polyline_segments, sample_polyline_by_arclength
+from river_matcher.geometry import PreparedPolyline, XYArray, prepare_polyline_segments
 from river_matcher.witnesses import SourceGuidedWitnessFinder
 
 type SampledCurve = tuple[XYArray, XYArray]
 
-_TANGENT_TOLERANCE = 1e-12
 _VERTEX_PROJECTION_TOLERANCE = 1e-12
 _TANGENT_NORM_TOLERANCE = 1e-12
 _DOT_ALIGNMENT_TOLERANCE = 1e-12
 
 
-def _sampled_unit_tangents(points: XYArray) -> XYArray | None:
-    """Estimate orientation-consistent tangents from equally spaced samples.
-    Interior tangents bisect the adjacent sampled-segment directions. This avoids choosing an arbitrary incoming or outgoing segment at a vertex."""
-    if len(points) < 2:
+def _sample_prepared_curve(prepared: PreparedPolyline, samples: int) -> SampledCurve | None:
+    starts, vectors, squared_lengths = prepared
+    lengths = np.sqrt(squared_lengths)
+
+    if len(lengths) == 0 or not np.all(np.isfinite(lengths)) or np.any(lengths <= _TANGENT_NORM_TOLERANCE):
         return None
 
-    intervals = np.diff(points, axis=0)
-    interval_lengths = np.linalg.norm(intervals, axis=1)
-    if not np.all(np.isfinite(interval_lengths)) or np.any(interval_lengths <= _TANGENT_TOLERANCE):
+    total_length = float(np.sum(lengths))
+
+    if not math.isfinite(total_length) or total_length <= _TANGENT_NORM_TOLERANCE:
         return None
 
-    unit_intervals = intervals / interval_lengths[:, None]
-    tangents = np.empty_like(points)
-    tangents[0] = unit_intervals[0]
-    tangents[-1] = unit_intervals[-1]
+    sample_count = max(2, int(samples))
+    positions = np.linspace(0.0, total_length, sample_count, dtype=np.float64)
+    cumulative = np.concatenate((np.asarray([0.0], dtype=np.float64), np.cumsum(lengths),))
+    segment_indices = np.searchsorted(cumulative, positions, side="right") - 1
+    segment_indices = np.clip(segment_indices, 0, len(lengths) - 1)
 
-    if len(points) > 2:
-        interior = unit_intervals[:-1] + unit_intervals[1:]
-        interior_lengths = np.linalg.norm(interior, axis=1)
-        regular = interior_lengths > _TANGENT_TOLERANCE
-        interior[regular] /= interior_lengths[regular, None]
+    fractions = (positions - cumulative[segment_indices]) / lengths[segment_indices]
+    fractions = np.clip(fractions, 0.0, 1.0)
 
-        # At a complete reversal the bisector is undefined. Either adjacent direction is equivalent because the metric uses an absolute dot.
-        interior[~regular] = unit_intervals[1:][~regular]
-        tangents[1:-1] = interior
-    return np.ascontiguousarray(tangents, dtype=np.float64)
+    points = (starts[segment_indices] + fractions[:, None] * vectors[segment_indices])
+    unit_vectors = vectors / lengths[:, None]
+    tangents = unit_vectors[segment_indices].copy()
+
+    for sample_index in range(sample_count):
+        segment_index = int(segment_indices[sample_index])
+        fraction = float(fractions[sample_index])
+        adjacent_index = -1
+
+        if fraction <= _VERTEX_PROJECTION_TOLERANCE and segment_index > 0:
+            adjacent_index = segment_index - 1
+        elif fraction >= 1.0 - _VERTEX_PROJECTION_TOLERANCE and segment_index + 1 < len(unit_vectors):
+            adjacent_index = segment_index + 1
+
+        if adjacent_index < 0:
+            continue
+
+        bisector = (unit_vectors[segment_index] + unit_vectors[adjacent_index])
+        bisector_length = float(np.linalg.norm(bisector))
+
+        # At a complete reversal either direction is equivalent because the
+        # angular comparison uses the absolute tangent dot product.
+        if bisector_length <= _TANGENT_NORM_TOLERANCE:
+            tangents[sample_index] = unit_vectors[segment_index]
+        else:
+            tangents[sample_index] = (bisector / bisector_length)
+
+    return np.ascontiguousarray(points, dtype=np.float64), np.ascontiguousarray(tangents, dtype=np.float64)
 
 
 @njit(cache=True, fastmath=False)
 def _directed_mean_distance_tangent(sample_points: XYArray, sample_tangents: XYArray, segment_starts: XYArray, segment_vectors: XYArray, segment_squared_lengths: np.ndarray,
-                                    tangent_weight: float, ) -> float:
+                                    tangent_weight: float) -> float:
     sample_count, segment_count = sample_points.shape[0], segment_starts.shape[0]
     if sample_count == 0 or segment_count == 0:
         return math.inf
@@ -147,23 +169,13 @@ class MeanDistanceTangent(BaseEdgeCost):
         self._source_sample_cache: dict[int, SampledCurve | None] = {}
         self._source_prepared_cache: dict[int, PreparedPolyline | None] = {}
 
-    def _sample_curve(self, polyline: XYArray) -> SampledCurve | None:
-        points = sample_polyline_by_arclength(polyline, self.curve_samples)
+    def _sample_curve(self, prepared: PreparedPolyline) -> SampledCurve | None:
+        return _sample_prepared_curve(prepared, self.curve_samples)
 
-        if points is None:
-            return None
-
-        tangents = _sampled_unit_tangents(points)
-
-        if tangents is None:
-            return None
-
-        return points, tangents
-
-    def _source_samples(self, edge_id: int) -> SampledCurve | None:
+    def _source_samples(self, edge_id: int, ) -> SampledCurve | None:
         if edge_id not in self._source_sample_cache:
-            edge = self._source_edges[edge_id]
-            self._source_sample_cache[edge_id] = self._sample_curve(edge.polyline)
+            prepared = self._source_prepared(edge_id)
+            self._source_sample_cache[edge_id] = (None if prepared is None else self._sample_curve(prepared))
 
         return self._source_sample_cache[edge_id]
 
@@ -187,12 +199,16 @@ class MeanDistanceTangent(BaseEdgeCost):
         if witness is None:
             return math.inf
 
-        source_samples = self._source_samples(edge_id)
         source_prepared = self._source_prepared(edge_id)
-        witness_samples = self._sample_curve(witness)
         witness_prepared = prepare_polyline_segments(witness)
 
-        if source_samples is None or source_prepared is None or witness_samples is None or witness_prepared is None:
+        if source_prepared is None or witness_prepared is None:
+            return math.inf
+
+        source_samples = self._source_samples(edge_id)
+        witness_samples = self._sample_curve(witness_prepared)
+
+        if source_samples is None or witness_samples is None:
             return math.inf
 
         source_points, source_tangents = source_samples
