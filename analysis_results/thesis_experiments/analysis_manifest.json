@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "analysis_name": "thesis_experiments",
+  "config_path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\River-Matcher\\experiments\\analysis_sources.json",
+  "sources": [
+    {
+      "suite_name": "thesis_main_experiments_v2",
+      "summary_path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\River-Matcher\\experiment_results\\thesis_main_experiments_v2\\suite_summary.json",
+      "selected_runs": 7,
+      "selected_solutions": 14
+    },
+    {
+      "suite_name": "confirmed_pairs",
+      "summary_path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\River-Matcher\\experiment_results\\confirmed_pairs\\suite_summary.json",
+      "selected_runs": 21,
+      "selected_solutions": 42
+    },
+    {
+      "suite_name": "cross_year_same_scale",
+      "summary_path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\River-Matcher\\experiment_results\\cross_year_same_scale\\suite_summary.json",
+      "selected_runs": 7,
+      "selected_solutions": 14
+    },
+    {
+      "suite_name": "rho_screen_12_5",
+      "summary_path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\River-Matcher\\experiment_results\\rho_screen_12_5\\suite_summary.json",
+      "selected_runs": 1,
+      "selected_solutions": 2
+    }
+  ],
+  "counts": {
+    "runs": 36,
+    "solutions": 72,
+    "graph_pairs": 6,
+    "objective_tradeoffs": 36,
+    "zero_cost_rows": 72,
+    "cost_mapping_agreements": 210,
+    "runtime_rows": 36
+  },
+  "files": {
+    "runs": "runs.csv",
+    "solutions": "solutions.csv",
+    "graph_pairs": "graph_pairs.csv",
+    "objective_tradeoffs": "objective_tradeoffs.csv",
+    "zero_cost_edges": "zero_cost_edges.csv",
+    "cost_mapping_agreement": "cost_mapping_agreement.csv",
+    "runtime_benchmark": "runtime_benchmark.csv"
+  }
+}

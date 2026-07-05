@@ -1,0 +1,7 @@
+pair_id,category,source_name,source_vertices,source_edges,target_name,target_vertices,target_edges,candidate_rho,top_k,empty_candidate_domains,total_candidates,minimum_candidates,median_candidates,maximum_candidates,treewidth,bags,maximum_bag_size,enumerated_states,feasible_states,message_entries,notes
+1955e5_to_1955e3,same_year_scale_change,1955e5,70,103,1955e3,371,581,10.0,25,0,454,2,6.0,14,4,66,5,209687,209687,30645,Reference production pair.
+1998e3_to_1955e3,cross_year_dense_stress,1998e3,321,509,1955e3,371,581,12.5,25,0,2210,2,6.0,17,5,316,6,5927186,5927186,547849,Cautious retry after two empty domains at rho=10.
+1998e5_to_1998e3,same_year_scale_change,1998e5,54,78,1998e3,321,509,10.0,25,0,339,2,6.0,13,4,51,5,71354,71354,10265,Same-year scale comparison for 1998.
+2014e5_to_1955e3,cross_year_and_scale_change,2014e5,51,74,1955e3,371,581,10.0,25,0,296,2,6.0,15,3,48,4,29639,29639,5710,Cross-year comparison with a denser target.
+2014e5_to_1955e5,cross_year_same_scale,2014e5,51,74,1955e5,70,103,12.5,25,0,191,2,4.0,6,3,48,4,6561,6561,1800,Cross-year comparison at the same simplification level. rho=12.5 is the smallest screened value that removed the two empty candidate domains observed at rho=10.
+2014e5_to_2014e3,same_year_scale_change,2014e5,51,74,2014e3,317,493,10.0,25,0,339,2,6.0,14,3,48,4,47150,47150,7178,Same-year scale comparison for 2014.
