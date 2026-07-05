@@ -1,0 +1,205 @@
+{
+  "created_utc": "2026-07-05T11:20:29.505721+00:00",
+  "git_commit": "ef572f0ae67afa9f02c9875465007d3901d25d4e",
+  "max_estimated_states": null,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "preflight_only": true,
+  "python": "3.12.1 (tags/v3.12.1:2305ca5, Dec  7 2023, 22:03:25) [MSC v.1937 64 bit (AMD64)]",
+  "reproducible": true,
+  "runs": [
+    {
+      "candidate_parameters": {
+        "rho": 20.0,
+        "top_k": 25
+      },
+      "candidates": {
+        "digest": "ad63c8085cf28e746fe75b969eaf8cf98aec7d8472fec63e8a0ece301e40f98a",
+        "empty_domains": 1,
+        "maximum_candidates": 9,
+        "median_candidates": 4.0,
+        "minimum_candidates": 0,
+        "total_candidates": 1569,
+        "vertices": 371
+      },
+      "cost": {
+        "name": "relative_length_error",
+        "options": {}
+      },
+      "decomposition": {
+        "bag_count": 364,
+        "digest": "57fcdf84aed950bbe1b94563df9d500e314c2aab4edbece9fab9e33e49ad6ee4",
+        "estimated_state_upper_bound": 942714,
+        "heuristic": "minimum_fill_in",
+        "largest_candidate_products": [
+          {
+            "bag": [
+              400,
+              493,
+              640,
+              806,
+              810,
+              816,
+              857,
+              890
+            ],
+            "candidate_product": 151200,
+            "children": 2,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              2326,
+              2419,
+              2457,
+              2536,
+              2745,
+              2749
+            ],
+            "candidate_product": 56448,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              400,
+              810,
+              816,
+              823,
+              857,
+              890
+            ],
+            "candidate_product": 52920,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              400,
+              489,
+              662,
+              810,
+              823,
+              857
+            ],
+            "candidate_product": 44100,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              813,
+              1190,
+              1218,
+              1290,
+              1337,
+              1387
+            ],
+            "candidate_product": 41472,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              400,
+              489,
+              502,
+              662,
+              823,
+              857
+            ],
+            "candidate_product": 36750,
+            "children": 2,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              813,
+              1144,
+              1190,
+              1218,
+              1337,
+              1387
+            ],
+            "candidate_product": 34560,
+            "children": 2,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              2242,
+              2326,
+              2419,
+              2457,
+              2468,
+              2749
+            ],
+            "candidate_product": 32256,
+            "children": 2,
+            "owned_edges": 1
+          },
+          {
+            "bag": [
+              810,
+              813,
+              816,
+              823,
+              890,
+              1132
+            ],
+            "candidate_product": 30240,
+            "children": 3,
+            "owned_edges": 0
+          },
+          {
+            "bag": [
+              1909,
+              2148,
+              2242,
+              2326,
+              2419,
+              2468
+            ],
+            "candidate_product": 25088,
+            "children": 2,
+            "owned_edges": 0
+          }
+        ],
+        "maximum_bag_size": 8,
+        "minimum_degree_width": 7,
+        "minimum_fill_width": 7,
+        "width": 7
+      },
+      "dynamic_programming": null,
+      "execution": {
+        "dynamic_programming_run": false,
+        "estimated_state_limit_exceeded": false,
+        "max_estimated_states": null,
+        "preflight_only": true,
+        "skip_reason": "preflight_only"
+      },
+      "objectives": null,
+      "repeat": 1,
+      "source": {
+        "edges": 581,
+        "name": "1955e3",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e3.txt",
+        "vertices": 371
+      },
+      "target": {
+        "edges": 103,
+        "name": "1955e5",
+        "path": "C:\\Users\\Kishan\\Documents\\University\\Thesis\\Thesis\\2-Data\\GraphExport\\1955e5.txt",
+        "vertices": 70
+      },
+      "timestamp_utc": "2026-07-05T11:20:29.503719+00:00",
+      "timings_seconds": {
+        "candidate_generation": 0.3671305999159813,
+        "load_source": 0.8307285001501441,
+        "load_target": 0.40144009981304407,
+        "source_decomposition": 0.11594010004773736,
+        "total": 1.7186706000939012
+      }
+    }
+  ],
+  "schema_version": 2
+}

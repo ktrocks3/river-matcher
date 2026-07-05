@@ -39,18 +39,14 @@ def _parse_cost_options(values: Sequence[str]) -> dict[str, object]:
 
     for value in values:
         key, separator, raw = value.partition("=")
-
         if not separator or not key:
             raise ValueError(f"Cost option must have the form key=value, received {value!r}.")
-
         if key in options:
             raise ValueError(f"Duplicate cost option {key!r}.")
-
         try:
             options[key] = json.loads(raw)
         except json.JSONDecodeError:
             options[key] = raw
-
     return options
 
 
