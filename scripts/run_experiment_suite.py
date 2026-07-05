@@ -1,4 +1,23 @@
 #!/usr/bin/env python
+"""
+Run a reproducible River-Matcher experiment suite without opening the UI.
+
+For every graph pair and cost, this script:
+  * loads and prepares the graph pair once;
+  * solves additive and bottleneck objectives in one DP traversal;
+  * records candidate, decomposition, DP, timing, mapping, edge-cost, and
+    witness information in JSON;
+  * writes an overlaid mapping PNG for each feasible objective;
+  * writes a best/median/worst edge-detail PNG for each feasible objective;
+  * writes one suite_summary.json containing compact rows for later analysis.
+
+Run from the River-Matcher repository root:
+
+    uv run python scripts/run_experiment_suite.py experiments.json
+
+The configuration format is documented in experiments.example.json.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +45,7 @@ from matplotlib.colors import Normalize
 
 from river_matcher import (RiverGraphMatcher, available_costs, load_junction_graph)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _utc_now() -> str:
@@ -134,22 +153,42 @@ def _dp_payload(result: Any) -> dict[str, Any]:
         "unique_cost_requests": stats.unique_cost_requests, "bags": bag_rows}
 
 
+ZERO_COST_TOLERANCE = 1e-12
+
+
 def _edge_statistics(edges: Sequence[Any]) -> dict[str, Any]:
     values = np.asarray([float(edge.cost) for edge in edges], dtype=np.float64)
 
     if values.size == 0:
-        return {"count": 0, "minimum": None, "q25": None, "median": None, "mean": None, "q75": None, "maximum": None, "standard_deviation": None}
+        return {"count": 0, "minimum": None, "q25": None, "median": None, "mean": None, "q75": None, "maximum": None, "standard_deviation": None, "zero_cost_count": 0,
+            "zero_cost_fraction": None, "positive_cost_count": 0, "positive_cost_median": None}
+
+    zero_mask = np.isclose(values, 0.0, rtol=0.0, atol=ZERO_COST_TOLERANCE)
+    positive_values = values[~zero_mask]
 
     return {"count": int(values.size), "minimum": float(np.min(values)), "q25": float(np.quantile(values, 0.25)), "median": float(np.median(values)),
-        "mean": float(np.mean(values)), "q75": float(np.quantile(values, 0.75)), "maximum": float(np.max(values)), "standard_deviation": float(np.std(values))}
+        "mean": float(np.mean(values)), "q75": float(np.quantile(values, 0.75)), "maximum": float(np.max(values)), "standard_deviation": float(np.std(values)),
+        "zero_cost_count": int(np.count_nonzero(zero_mask)), "zero_cost_fraction": float(np.mean(zero_mask)), "positive_cost_count": int(positive_values.size),
+        "positive_cost_median": (float(np.median(positive_values)) if positive_values.size else None)}
+
+
+def _representative_edge_objects(edges: Sequence[Any]) -> list[tuple[str, Any]]:
+    if not edges:
+        return []
+
+    ordered = sorted(edges, key=lambda edge: (float(edge.cost), int(edge.edge_id)))
+    positive = [edge for edge in ordered if not math.isclose(float(edge.cost), 0.0, rel_tol=0.0, abs_tol=ZERO_COST_TOLERANCE)]
+    median_positive = (positive[(len(positive) - 1) // 2] if positive else ordered[0])
+
+    return [("Best", ordered[0]), ("Median positive", median_positive), ("Worst", ordered[-1]), ]
 
 
 def _representative_edges(edges: Sequence[Any]) -> dict[str, int] | None:
-    if not edges:
+    selected = _representative_edge_objects(edges)
+    if not selected:
         return None
 
-    ordered = sorted(edges, key=lambda edge: (float(edge.cost), int(edge.edge_id)))
-    return {"best": int(ordered[0].edge_id), "median": int(ordered[(len(ordered) - 1) // 2].edge_id), "worst": int(ordered[-1].edge_id)}
+    return {"best": int(selected[0][1].edge_id), "median_positive": int(selected[1][1].edge_id), "worst": int(selected[2][1].edge_id)}
 
 
 def _solution_payload(solution: Any | None) -> dict[str, Any] | None:
@@ -281,12 +320,10 @@ def _draw_context(ax: Any, source: Any, target: Any) -> None:
 
 def _plot_edge_details(source: Any, target: Any, solution: Any, *, title: str, output_path: Path, dpi: int) -> None:
     source_edge_by_id = _edge_lookup(source)
-    ordered = sorted(solution.edges, key=lambda edge: (float(edge.cost), int(edge.edge_id)))
+    selected = _representative_edge_objects(solution.edges)
 
-    if not ordered:
+    if not selected:
         return
-
-    selected = [("Best", ordered[0]), ("Median", ordered[(len(ordered) - 1) // 2]), ("Worst", ordered[-1]), ]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), squeeze=False)
 
@@ -353,7 +390,7 @@ def _plot_cost_distribution(solution: Any, *, title: str, output_path: Path, dpi
 
 
 def _run_pair(pair: Mapping[str, Any], *, costs: Sequence[Mapping[str, Any]], defaults: Mapping[str, Any], suite_root: Path, dpi: int, common_metadata: Mapping[str, Any]) -> \
-list[dict[str, Any]]:
+tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pair_id = _slug(str(pair.get("id", f"{Path(pair['source']).stem}_to_{Path(pair['target']).stem}")))
     source_path = Path(pair["source"]).expanduser().resolve()
     target_path = Path(pair["target"]).expanduser().resolve()
@@ -380,7 +417,11 @@ list[dict[str, Any]]:
         "metadata": {**common_metadata, "pair_notes": pair.get("notes"), "pair_category": pair.get("category")}}
     _write_json(pair_root / "pair.json", pair_payload)
 
-    summary_rows = []
+    run_rows: list[dict[str, Any]] = []
+    solution_rows: list[dict[str, Any]] = []
+
+    decomposition_summary = _decomposition_payload(matcher)
+    candidate_summary = _candidate_payload(matcher)
 
     for cost_config in costs:
         cost_name = str(cost_config["name"])
@@ -402,7 +443,7 @@ list[dict[str, Any]]:
                 continue
 
             objective_figures = {"overview": str((cost_root / f"{objective_name}_overview.png").relative_to(suite_root)),
-                "edge_details": str((cost_root / f"{objective_name}_best_median_worst.png").relative_to(suite_root)),
+                "edge_details": str((cost_root / f"{objective_name}_best_median_positive_worst.png").relative_to(suite_root)),
                 "cost_distribution": str((cost_root / f"{objective_name}_cost_distribution.png").relative_to(suite_root))}
             generated_figures[objective_name] = objective_figures
 
@@ -410,7 +451,8 @@ list[dict[str, Any]]:
                                                             f"{cost_name} | {objective_name}"), output_path=cost_root / f"{objective_name}_overview.png", dpi=dpi,
                 visual_range=visual_range, cost_label=cost_label)
             _plot_edge_details(source, target, solution, title=(f"{source.name} → {target.name} | "
-                                                                f"{cost_name} | {objective_name}"), output_path=cost_root / f"{objective_name}_best_median_worst.png", dpi=dpi)
+                                                                f"{cost_name} | {objective_name}"), output_path=cost_root / f"{objective_name}_best_median_positive_worst.png",
+                dpi=dpi)
             _plot_cost_distribution(solution, title=(f"Local costs | {source.name} → {target.name} | "
                                                      f"{cost_name} | {objective_name}"), output_path=cost_root / f"{objective_name}_cost_distribution.png", dpi=dpi)
 
@@ -426,22 +468,30 @@ list[dict[str, Any]]:
         report_path = cost_root / "report.json"
         _write_json(report_path, report)
 
+        run_id = f"{pair_id}__{_slug(cost_name)}"
+        relative_report = str(report_path.relative_to(suite_root))
+
+        run_rows.append({"run_id": run_id, "pair_id": pair_id, "source_name": source.name, "target_name": target.name, "source_vertices": len(source.vertices),
+            "source_edges": len(source.edges), "target_vertices": len(target.vertices), "target_edges": len(target.edges), "candidate_rho": candidate_rho, "top_k": top_k,
+            "cost": cost_name, "cost_options": cost_options, "visual_range": visual_range, "visual_range_is_fixed": visual_range is not None,
+            "additive_feasible": result.additive is not None, "bottleneck_feasible": result.bottleneck is not None, "empty_candidate_domains": candidate_summary["empty_domains"],
+            "total_candidates": candidate_summary["total_candidates"], "minimum_candidates": candidate_summary["minimum_candidates"],
+            "median_candidates": candidate_summary["median_candidates"], "maximum_candidates": candidate_summary["maximum_candidates"], "treewidth": decomposition_summary["width"],
+            "bags": decomposition_summary["bags"], "maximum_bag_size": decomposition_summary["maximum_bag_size"], "enumerated_states": (result.dp_statistics.enumerated_states),
+            "feasible_states": (result.dp_statistics.feasible_states), "message_entries": (result.dp_statistics.message_entries),
+            "unique_cost_requests": (result.dp_statistics.unique_cost_requests), "load_graphs_seconds": load_seconds, "prepare_matcher_seconds": prepare_seconds,
+            "solve_both_objectives_seconds": solve_seconds, "generate_figures_seconds": figure_seconds, "report": relative_report})
+
         for objective_name, solution in (("additive", result.additive), ("bottleneck", result.bottleneck),):
             edge_stats = (_edge_statistics(solution.edges) if solution is not None else {})
-            summary_rows.append(
-                {"pair_id": pair_id, "source_name": source.name, "target_name": target.name, "source_vertices": len(source.vertices), "source_edges": len(source.edges),
-                    "target_vertices": len(target.vertices), "target_edges": len(target.edges), "candidate_rho": candidate_rho, "top_k": top_k, "cost": cost_name,
-                    "cost_options": cost_options, "objective": objective_name, "feasible": solution is not None,
-                    "objective_value": (float(solution.value) if solution is not None else None), "mapped_vertices": (len(solution.mapping) if solution is not None else 0),
-                    "materialized_witnesses": (len(solution.edges) if solution is not None else 0), "local_cost_minimum": edge_stats.get("minimum"),
-                    "local_cost_median": edge_stats.get("median"), "local_cost_mean": edge_stats.get("mean"), "local_cost_maximum": edge_stats.get("maximum"),
-                    "empty_candidate_domains": (result.candidate_statistics.empty_domains), "total_candidates": (result.candidate_statistics.total_candidates),
-                    "minimum_candidates": (result.candidate_statistics.minimum_candidates), "maximum_candidates": (result.candidate_statistics.maximum_candidates),
-                    "treewidth": _decomposition_payload(matcher)["width"], "bags": _decomposition_payload(matcher)["bags"],
-                    "enumerated_states": (result.dp_statistics.enumerated_states), "feasible_states": (result.dp_statistics.feasible_states),
-                    "message_entries": (result.dp_statistics.message_entries), "unique_cost_requests": (result.dp_statistics.unique_cost_requests),
-                    "load_graphs_seconds": load_seconds, "prepare_matcher_seconds": prepare_seconds, "solve_both_objectives_seconds": solve_seconds,
-                    "generate_figures_seconds": figure_seconds, "report": str(report_path.relative_to(suite_root))})
+            solution_rows.append({"run_id": run_id, "pair_id": pair_id, "cost": cost_name, "objective": objective_name, "feasible": solution is not None,
+                "objective_value": (float(solution.value) if solution is not None else None), "mapped_vertices": (len(solution.mapping) if solution is not None else 0),
+                "materialized_witnesses": (len(solution.edges) if solution is not None else 0), "local_cost_minimum": edge_stats.get("minimum"),
+                "local_cost_q25": edge_stats.get("q25"), "local_cost_median": edge_stats.get("median"), "local_cost_positive_median": edge_stats.get("positive_cost_median"),
+                "local_cost_mean": edge_stats.get("mean"), "local_cost_q75": edge_stats.get("q75"), "local_cost_maximum": edge_stats.get("maximum"),
+                "local_cost_standard_deviation": edge_stats.get("standard_deviation"), "zero_cost_edges": edge_stats.get("zero_cost_count", 0),
+                "zero_cost_fraction": edge_stats.get("zero_cost_fraction"), "positive_cost_edges": edge_stats.get("positive_cost_count", 0),
+                "figures": generated_figures.get(objective_name, {}), "report": relative_report})
 
         print(f"[{pair_id}] {cost_name}: "
               f"additive={'yes' if result.additive else 'no'}, "
@@ -449,7 +499,7 @@ list[dict[str, Any]]:
               f"states={result.dp_statistics.enumerated_states:,}, "
               f"solve={solve_seconds:.3f}s")
 
-    return summary_rows
+    return run_rows, solution_rows
 
 
 def _validate_config(config: Mapping[str, Any]) -> None:
@@ -496,15 +546,19 @@ def main() -> int:
         "argv": sys.argv}
 
     defaults = dict(config.get("defaults", {}))
-    summary_rows: list[dict[str, Any]] = []
+    all_run_rows: list[dict[str, Any]] = []
+    all_solution_rows: list[dict[str, Any]] = []
     suite_started = time.perf_counter()
 
     for pair in config["pairs"]:
-        summary_rows.extend(_run_pair(pair, costs=config["costs"], defaults=defaults, suite_root=suite_root, dpi=arguments.dpi, common_metadata=common_metadata))
+        pair_run_rows, pair_solution_rows = _run_pair(pair, costs=config["costs"], defaults=defaults, suite_root=suite_root, dpi=arguments.dpi, common_metadata=common_metadata)
+        all_run_rows.extend(pair_run_rows)
+        all_solution_rows.extend(pair_solution_rows)
 
     suite_seconds = time.perf_counter() - suite_started
     suite_summary = {"schema_version": SCHEMA_VERSION, "created_at_utc": _utc_now(), "suite_name": suite_name, "metadata": common_metadata, "defaults": defaults,
-        "pair_count": len(config["pairs"]), "cost_count": len(config["costs"]), "objective_rows": len(summary_rows), "suite_runtime_seconds": suite_seconds, "rows": summary_rows}
+        "pair_count": len(config["pairs"]), "cost_count": len(config["costs"]), "run_count": len(all_run_rows), "solution_count": len(all_solution_rows),
+        "suite_runtime_seconds": suite_seconds, "runs": all_run_rows, "solutions": all_solution_rows}
     summary_path = suite_root / "suite_summary.json"
     _write_json(summary_path, suite_summary)
 
