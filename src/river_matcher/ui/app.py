@@ -192,7 +192,6 @@ class MainWindow(QMainWindow):
         self._build_layout()
         self._connect_signals()
         self.cost_options.set_cost(self.current_cost_name)
-        self.cost_options.set_candidate_rho(self.candidate_rho.value())
         self._start_catalog_load()
 
     @property
@@ -245,7 +244,7 @@ class MainWindow(QMainWindow):
         parameters.addWidget(self.cost_combo, 0, 1)
         parameters.addWidget(QLabel("Displayed objective"), 0, 2)
         parameters.addWidget(self.objective_combo, 0, 3)
-        parameters.addWidget(QLabel("Candidate radius"), 1, 0)
+        parameters.addWidget(QLabel("Candidate rho"), 1, 0)
         parameters.addWidget(self.candidate_rho, 1, 1)
         parameters.addWidget(QLabel("Top-k candidates"), 1, 2)
         parameters.addWidget(self.top_k, 1, 3)
@@ -287,7 +286,6 @@ class MainWindow(QMainWindow):
         self.target_combo.currentIndexChanged.connect(self._target_changed)
         self.cost_combo.currentIndexChanged.connect(self._cost_changed)
         self.objective_combo.currentIndexChanged.connect(self._objective_changed)
-        self.candidate_rho.valueChanged.connect(self.cost_options.set_candidate_rho)
         self.run_button.clicked.connect(self._run_selected)
         self.compute_all_button.clicked.connect(self._compute_all)
         self.save_button.clicked.connect(self._save_result)
