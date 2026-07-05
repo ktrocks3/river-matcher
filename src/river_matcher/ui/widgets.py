@@ -132,11 +132,27 @@ class PolylineIndex:
             cumulative_starts.append(cumulative[:-1])
 
         if not starts:
-            return cls(np.empty((0, 2), dtype=np.float64), np.empty((0, 2), dtype=np.float64), np.empty(0, dtype=np.float64), np.empty(0, dtype=np.float64),
-                np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64), {}, {})
+            return cls(
+                np.empty((0, 2), dtype=np.float64),
+                np.empty((0, 2), dtype=np.float64),
+                np.empty(0, dtype=np.float64),
+                np.empty(0, dtype=np.float64),
+                np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=np.float64),
+                {},
+                {},
+            )
 
-        return cls(np.concatenate(starts), np.concatenate(vectors), np.concatenate(squared_lengths), np.concatenate(lengths), np.concatenate(path_ids),
-            np.concatenate(cumulative_starts), totals, retained)
+        return cls(
+            np.concatenate(starts),
+            np.concatenate(vectors),
+            np.concatenate(squared_lengths),
+            np.concatenate(lengths),
+            np.concatenate(path_ids),
+            np.concatenate(cumulative_starts),
+            totals,
+            retained,
+        )
 
     def nearest(self, x: float, y: float) -> tuple[int, float, float] | None:
         if len(self.starts) == 0:
@@ -210,7 +226,11 @@ class GraphView(pg.PlotWidget):
     def set_graph(self, graph: JunctionGraph, *, title: str) -> None:
         self.graph = graph
         self.setTitle(title)
-        edge_polylines = {int(edge.id): points for edge in graph.edges if (points := _as_points(edge.polyline)) is not None}
+        edge_polylines = {
+            int(edge.id): points
+            for edge in graph.edges
+            if (points := _as_points(edge.polyline)) is not None
+        }
         self._graph_index = PolylineIndex.build(edge_polylines)
         self._positions = _vertex_positions(graph)
         ordered = sorted(self._positions)
@@ -229,7 +249,11 @@ class GraphView(pg.PlotWidget):
         self.enableAutoRange()
 
     def set_witnesses(self, edges: Iterable[MatchedEdge]) -> None:
-        witnesses = {int(edge.edge_id): points for edge in edges if (points := _as_points(edge.witness)) is not None}
+        witnesses = {
+            int(edge.edge_id): points
+            for edge in edges
+            if (points := _as_points(edge.witness)) is not None
+        }
         self._witness_index = PolylineIndex.build(witnesses)
         x, y = _joined_path(witnesses.values())
         self._witness_item.setData(x, y, connect="finite")
@@ -314,21 +338,43 @@ class OptionSpec:
     decimals: int = 3
 
 
-_COST_OPTIONS: dict[str, tuple[OptionSpec, ...]] = {"relative_length_error": (), "log_length_distortion": (),
-    "hausdorff_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),),
-    "mean_distance_tangent": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-                              OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000), OptionSpec("tangent_weight", "Tangent weight", "float", 1.0),),
-    "symmetric_corridor_exceedance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-                                      OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
-                                      OptionSpec("corridor_radius", "Exceedance radius", "float", 10.0, 1e-9),),
-    "discrete_frechet_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-                                  OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),),
-    "dynamic_time_warping_distance": (OptionSpec("rho", "Witness rho", "float", 10.0), OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
-                                      OptionSpec("curve_samples", "Curve samples", "int", 80, 2, 100_000), OptionSpec("warping_window", "Warping window", "int", 8, 1, 100_000),
-                                      OptionSpec("normalize", "Normalize", "bool", True),)}
+_COST_OPTIONS: dict[str, tuple[OptionSpec, ...]] = {
+    "relative_length_error": (),
+    "log_length_distortion": (),
+    "hausdorff_distance": (
+        OptionSpec("rho", "Witness rho", "float", 10.0),
+        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+    ),
+    "mean_distance_tangent": (
+        OptionSpec("rho", "Witness rho", "float", 10.0),
+        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
+        OptionSpec("tangent_weight", "Tangent weight", "float", 1.0),
+    ),
+    "symmetric_corridor_exceedance": (
+        OptionSpec("rho", "Witness rho", "float", 10.0),
+        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
+        OptionSpec("corridor_radius", "Exceedance radius", "float", 10.0, 1e-9),
+    ),
+    "discrete_frechet_distance": (
+        OptionSpec("rho", "Witness rho", "float", 10.0),
+        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+        OptionSpec("curve_samples", "Curve samples", "int", 64, 2, 100_000),
+    ),
+    "dynamic_time_warping_distance": (
+        OptionSpec("rho", "Witness rho", "float", 10.0),
+        OptionSpec("edge_samples", "Guide samples per edge", "int", 12, 2, 10_000),
+        OptionSpec("curve_samples", "Curve samples", "int", 80, 2, 100_000),
+        OptionSpec("warping_window", "Warping window", "int", 8, 1, 100_000),
+        OptionSpec("normalize", "Normalize", "bool", True),
+    ),
+}
 
 
 class CostOptionsWidget(QWidget):
+    optionsChanged = Signal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._stack = QStackedWidget()
@@ -365,6 +411,13 @@ class CostOptionsWidget(QWidget):
                     double_spin.setValue(float(spec.default))
                     widget = double_spin
 
+                if isinstance(widget, QCheckBox):
+                    widget.toggled.connect(lambda _checked, self=self: self.optionsChanged.emit())
+                elif isinstance(widget, QSpinBox):
+                    widget.valueChanged.connect(lambda _value, self=self: self.optionsChanged.emit())
+                elif isinstance(widget, QDoubleSpinBox):
+                    widget.valueChanged.connect(lambda _value, self=self: self.optionsChanged.emit())
+
                 fields[spec.name] = widget
                 form.addRow(spec.label, widget)
 
@@ -376,6 +429,17 @@ class CostOptionsWidget(QWidget):
         page = self._pages.get(cost_name)
         if page is not None:
             self._stack.setCurrentWidget(page)
+
+    def set_options(self, cost_name: str, options: Mapping[str, object]) -> None:
+        for name, value in options.items():
+            widget = self._fields.get(cost_name, {}).get(name)
+
+            if isinstance(widget, QCheckBox):
+                widget.setChecked(bool(value))
+            elif isinstance(widget, QSpinBox):
+                widget.setValue(int(value))
+            elif isinstance(widget, QDoubleSpinBox):
+                widget.setValue(float(value))
 
     def options_for(self, cost_name: str) -> dict[str, object]:
         options: dict[str, object] = {}
