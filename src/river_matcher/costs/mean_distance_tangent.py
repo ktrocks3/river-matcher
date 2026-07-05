@@ -172,7 +172,7 @@ class MeanDistanceTangent(BaseEdgeCost):
     def _sample_curve(self, prepared: PreparedPolyline) -> SampledCurve | None:
         return _sample_prepared_curve(prepared, self.curve_samples)
 
-    def _source_samples(self, edge_id: int, ) -> SampledCurve | None:
+    def _source_samples(self, edge_id: int) -> SampledCurve | None:
         if edge_id not in self._source_sample_cache:
             prepared = self._source_prepared(edge_id)
             self._source_sample_cache[edge_id] = (None if prepared is None else self._sample_curve(prepared))

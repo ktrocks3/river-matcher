@@ -61,7 +61,7 @@ def main() -> None:
 
         if source_samples is not None:
             sampled_points, sampled_tangents = source_samples
-            sampled_lengths = np.linalg.norm(np.diff(sampled_points, axis=0), axis=1, )
+            sampled_lengths = np.linalg.norm(np.diff(sampled_points, axis=0), axis=1)
 
             print(f"  sampled_min={float(sampled_lengths.min())}, "
                   f"sampled_zero={int(np.count_nonzero(sampled_lengths <= 1e-12))}, "
@@ -83,7 +83,7 @@ def main() -> None:
 
         for target_u in candidate_sets[edge.u]:
             for target_v in candidate_sets[edge.v]:
-                witness = cost._finder.path(edge.id, edge.u, edge.v, target_u, target_v, )
+                witness = cost._finder.path(edge.id, edge.u, edge.v, target_u, target_v)
 
                 if witness is None:
                     continue

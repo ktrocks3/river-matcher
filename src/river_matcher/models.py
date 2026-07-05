@@ -109,7 +109,7 @@ class JunctionGraph:
                 raise ValueError(f"Vertex {vertex} must contain numeric values") from exc
 
             if point.shape != (2,):
-                raise ValueError(f"Vertex {vertex} must have shape (2, ), got {point.shape}")
+                raise ValueError(f"Vertex {vertex} must have shape (2), got {point.shape}")
             if not np.all(np.isfinite(point)):
                 raise ValueError(f"Vertex {vertex} contains NaN or infinite coordinates")
 

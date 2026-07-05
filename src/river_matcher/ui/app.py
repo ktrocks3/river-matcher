@@ -30,7 +30,17 @@ from river_matcher.costs import available_costs
 from river_matcher.dynamic_programming import Objective
 from river_matcher.matcher import BothMatchResult, MatchSolution
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
-from river_matcher.ui.workers import GraphRepository, MatchWorker, PairSessionStore, PreviewOutcome, PreviewWorker, RunOutcome
+from river_matcher.ui.workers import (
+    CatalogOutcome,
+    CatalogWorker,
+    GraphInfo,
+    GraphRepository,
+    MatchWorker,
+    PairSessionStore,
+    PreviewOutcome,
+    PreviewWorker,
+    RunOutcome,
+)
 
 
 def _find_graph_directory() -> Path:
@@ -130,6 +140,8 @@ class MainWindow(QMainWindow):
         self.sessions = PairSessionStore(maximum_sessions=6)
         self._preview_request_id = 0
         self._active_jobs = 0
+        self._graph_catalog: dict[Path, GraphInfo] = {}
+        self._rebuilding_targets = False
         self._outcomes: dict[tuple[str, str, float, int, str, str], RunOutcome] = {}
         self._current_outcome: RunOutcome | None = None
 
@@ -178,11 +190,9 @@ class MainWindow(QMainWindow):
 
         self._build_layout()
         self._connect_signals()
-        self._populate_graph_files()
-        self._restore_controls()
         self.cost_options.set_cost(self.current_cost_name)
         self.cost_options.set_candidate_rho(self.candidate_rho.value())
-        QTimer.singleShot(0, self._schedule_preview)
+        self._start_catalog_load()
 
     @property
     def current_cost_name(self) -> str:
@@ -272,8 +282,8 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self.source_browse.clicked.connect(lambda: self._browse_graph(self.source_combo))
         self.target_browse.clicked.connect(lambda: self._browse_graph(self.target_combo))
-        self.source_combo.currentIndexChanged.connect(self._schedule_preview)
-        self.target_combo.currentIndexChanged.connect(self._schedule_preview)
+        self.source_combo.currentIndexChanged.connect(self._source_changed)
+        self.target_combo.currentIndexChanged.connect(self._target_changed)
         self.cost_combo.currentIndexChanged.connect(self._cost_changed)
         self.objective_combo.currentIndexChanged.connect(self._objective_changed)
         self.candidate_rho.valueChanged.connect(self.cost_options.set_candidate_rho)
@@ -286,81 +296,269 @@ class MainWindow(QMainWindow):
         self.source_view.edgePositionSelected.connect(self._source_edge_selected)
         self.target_view.edgePositionSelected.connect(self._target_witness_selected)
 
-    def _populate_graph_files(self) -> None:
+    @staticmethod
+    def _graph_group(path: Path) -> str:
+        """Prefer targets from the same filename group, such as the same year."""
+        stem = path.stem
+        prefix, separator, _ = stem.partition("e")
+        return prefix if separator else stem
+
+    @staticmethod
+    def _graph_label(info: GraphInfo) -> str:
+        return f"{info.path.name} — {info.vertices} V / {info.edges} E"
+
+    def _start_catalog_load(self) -> None:
         directory = _find_graph_directory()
         paths = sorted(directory.glob("*.txt"))
 
-        for combo in (self.source_combo, self.target_combo):
-            combo.blockSignals(True)
-            combo.clear()
-            for path in paths:
-                combo.addItem(path.name, str(path.resolve()))
-            combo.blockSignals(False)
+        self.source_combo.setEnabled(False)
+        self.target_combo.setEnabled(False)
+        self.run_button.setEnabled(False)
+        self.compute_all_button.setEnabled(False)
 
         if not paths:
             self.status_label.setText(f"No .txt graph files found in {directory}")
+            return
 
-    def _restore_controls(self) -> None:
-        source_path = self.settings.value("source_path", "")
-        target_path = self.settings.value("target_path", "")
+        worker = CatalogWorker(self.repository, paths)
+        worker.signals.progress.connect(self._worker_progress)
+        worker.signals.result.connect(self._catalog_ready)
+        worker.signals.failed.connect(self._worker_failed)
+        self.thread_pool.start(worker)
 
-        if source_path:
-            self._ensure_combo_path(self.source_combo, Path(str(source_path)))
-        else:
-            self._select_filename(self.source_combo, "1955e5.txt")
+    def _catalog_ready(self, raw_outcome: object) -> None:
+        if not isinstance(raw_outcome, CatalogOutcome):
+            return
 
-        if target_path:
-            self._ensure_combo_path(self.target_combo, Path(str(target_path)))
-        else:
-            self._select_filename(self.target_combo, "1955e3.txt")
+        self._graph_catalog = {graph.path.resolve(): graph for graph in raw_outcome.graphs}
+        self._populate_source_choices()
+        self._restore_pair_selection()
+        self.source_combo.setEnabled(True)
+        self.target_combo.setEnabled(True)
+        self.run_button.setEnabled(True)
+        self.compute_all_button.setEnabled(True)
+        self.status_label.setText(f"Loaded {len(self._graph_catalog)} graph files")
+        self._schedule_preview()
+
+    def _populate_source_choices(self, preferred_path: Path | None = None) -> None:
+        previous = preferred_path
+        if previous is None and self.source_combo.currentData():
+            previous = Path(str(self.source_combo.currentData())).resolve()
+
+        graphs = sorted(
+            (
+                graph
+                for graph in self._graph_catalog.values()
+                if any(other.vertices > graph.vertices for other in self._graph_catalog.values())
+            ),
+            key=lambda graph: (graph.vertices, graph.path.name.lower()),
+        )
+
+        self.source_combo.blockSignals(True)
+        self.source_combo.clear()
+
+        for graph in graphs:
+            self.source_combo.addItem(self._graph_label(graph), str(graph.path))
+
+        self.source_combo.blockSignals(False)
+
+        if previous is not None:
+            self._select_path(self.source_combo, previous)
+
+    def _restore_pair_selection(self) -> None:
+        saved_source = str(self.settings.value("source_path", ""))
+        saved_target = str(self.settings.value("target_path", ""))
+
+        source_path = Path(saved_source).resolve() if saved_source else None
+        target_path = Path(saved_target).resolve() if saved_target else None
+
+        if source_path is None or source_path not in self._graph_catalog:
+            source_path = next(
+                (
+                    path
+                    for path in self._graph_catalog
+                    if path.name.lower() == "1955e5.txt"
+                ),
+                None,
+            )
+
+        if source_path is not None:
+            self._select_path(self.source_combo, source_path)
+
+        self._rebuild_target_choices(preferred_path=target_path)
+
+        if not saved_target:
+            default_target = next(
+                (
+                    path
+                    for path in self._graph_catalog
+                    if path.name.lower() == "1955e3.txt"
+                ),
+                None,
+            )
+
+            if default_target is not None:
+                self._select_path(self.target_combo, default_target)
 
         self._select_data(self.cost_combo, str(self.settings.value("cost", "relative_length_error")))
         self._select_data(self.objective_combo, str(self.settings.value("objective", Objective.ADDITIVE.value)))
 
+    def _source_changed(self) -> None:
+        if self._rebuilding_targets:
+            return
+
+        self._rebuild_target_choices()
+        self._pair_changed()
+
+    def _target_changed(self) -> None:
+        if not self._rebuilding_targets:
+            self._pair_changed()
+
+    def _pair_changed(self) -> None:
+        self._outcomes.clear()
+        self._current_outcome = None
+        self.save_button.setEnabled(False)
+        self._schedule_preview()
+
+    def _rebuild_target_choices(self, preferred_path: Path | None = None) -> None:
+        source_data = self.source_combo.currentData()
+
+        if not source_data:
+            return
+
+        source_path = Path(str(source_data)).resolve()
+        source = self._graph_catalog.get(source_path)
+
+        if source is None:
+            return
+
+        current_path = preferred_path
+        if current_path is None and self.target_combo.currentData():
+            current_path = Path(str(self.target_combo.currentData())).resolve()
+
+        source_group = self._graph_group(source.path)
+        valid = [graph for graph in self._graph_catalog.values() if graph.vertices > source.vertices]
+        valid.sort(
+            key=lambda graph: (
+                self._graph_group(graph.path) != source_group,
+                graph.vertices - source.vertices,
+                graph.path.name.lower(),
+            )
+        )
+
+        self._rebuilding_targets = True
+        self.target_combo.blockSignals(True)
+        self.target_combo.clear()
+
+        for graph in valid:
+            self.target_combo.addItem(self._graph_label(graph), str(graph.path))
+
+        selected = False
+
+        if current_path is not None:
+            selected = self._select_path(self.target_combo, current_path)
+
+        if not selected and valid:
+            # The first entry is the nearest denser graph, preferring the same filename group/year.
+            self.target_combo.setCurrentIndex(0)
+
+        self.target_combo.blockSignals(False)
+        self._rebuilding_targets = False
+
+        if valid:
+            target_path = Path(str(self.target_combo.currentData())).resolve()
+            target = self._graph_catalog[target_path]
+            self.direction_label.setText(
+                f"Sparse-to-dense direction: {source.path.name} ({source.vertices} V) → "
+                f"{target.path.name} ({target.vertices} V)"
+            )
+        else:
+            self.direction_label.setText("No denser target is available for this source.")
+
     @staticmethod
-    def _select_filename(combo: QComboBox, filename: str) -> None:
+    def _select_data(combo: QComboBox, value: str) -> bool:
+        index = combo.findData(value)
+
+        if index < 0:
+            return False
+
+        combo.setCurrentIndex(index)
+        return True
+
+    @staticmethod
+    def _select_path(combo: QComboBox, path: Path) -> bool:
+        resolved = path.expanduser().resolve()
+
         for index in range(combo.count()):
             data = combo.itemData(index)
-            if data and Path(str(data)).name.lower() == filename.lower():
-                combo.setCurrentIndex(index)
-                return
 
-    @staticmethod
-    def _select_data(combo: QComboBox, value: str) -> None:
-        index = combo.findData(value)
-        if index >= 0:
-            combo.setCurrentIndex(index)
-
-    @staticmethod
-    def _ensure_combo_path(combo: QComboBox, path: Path) -> None:
-        resolved = path.expanduser().resolve()
-        for index in range(combo.count()):
-            if Path(str(combo.itemData(index))).resolve() == resolved:
+            if data and Path(str(data)).resolve() == resolved:
                 combo.setCurrentIndex(index)
-                return
-        combo.addItem(resolved.name, str(resolved))
-        combo.setCurrentIndex(combo.count() - 1)
+                return True
+
+        return False
 
     def _selected_paths(self) -> tuple[Path, Path] | None:
         source = self.source_combo.currentData()
         target = self.target_combo.currentData()
+
         if not source or not target:
             return None
 
-        first = Path(str(source))
-        second = Path(str(target))
-        if first.resolve() == second.resolve():
-            QMessageBox.warning(self, "Graph pair", "Choose two different graph files.")
-            return None
-        return first, second
+        return Path(str(source)), Path(str(target))
 
     def _browse_graph(self, combo: QComboBox) -> None:
         current = combo.currentData()
         directory = str(Path(str(current)).parent) if current else str(_find_graph_directory())
-        filename, _ = QFileDialog.getOpenFileName(self, "Select TopoTide graph", directory, "Graph exports (*.txt);;All files (*)")
-        if filename:
-            self._ensure_combo_path(combo, Path(filename))
-            self._schedule_preview()
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select TopoTide graph",
+            directory,
+            "Graph exports (*.txt);;All files (*)",
+        )
+
+        if not filename:
+            return
+
+        requested = Path(filename).resolve()
+        worker = CatalogWorker(self.repository, (requested,))
+        worker.signals.progress.connect(self._worker_progress)
+        worker.signals.failed.connect(self._worker_failed)
+
+        def loaded(raw_outcome: object) -> None:
+            if not isinstance(raw_outcome, CatalogOutcome) or not raw_outcome.graphs:
+                return
+
+            info = raw_outcome.graphs[0]
+            self._graph_catalog[info.path.resolve()] = info
+            self._populate_source_choices(
+                preferred_path=info.path if combo is self.source_combo else None
+            )
+
+            if combo is self.source_combo:
+                if not self._select_path(self.source_combo, info.path):
+                    self.status_label.setText(
+                        f"{info.path.name} cannot be a source because no denser graph is loaded."
+                    )
+                    return
+
+                self._rebuild_target_choices()
+                self._pair_changed()
+                return
+
+            self._rebuild_target_choices(preferred_path=info.path)
+
+            if not self._select_path(self.target_combo, info.path):
+                selected = self.target_combo.currentData()
+                selected_name = Path(str(selected)).name if selected else "none"
+                self.status_label.setText(
+                    f"{info.path.name} is not denser than the selected source; using {selected_name}."
+                )
+
+            self._pair_changed()
+
+        worker.signals.result.connect(loaded)
+        self.thread_pool.start(worker)
 
     def _schedule_preview(self) -> None:
         paths = self._selected_paths()
@@ -384,7 +582,6 @@ class MainWindow(QMainWindow):
         if not isinstance(raw_outcome, PreviewOutcome) or raw_outcome.request_id != self._preview_request_id:
             return
         outcome = raw_outcome
-        self._apply_normalized_paths(outcome.source_path, outcome.target_path)
         self.source_view.set_graph(outcome.source, title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E")
         self.target_view.set_graph(outcome.target, title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E")
         self.direction_label.setText(
@@ -395,16 +592,6 @@ class MainWindow(QMainWindow):
         self._current_outcome = None
         self.save_button.setEnabled(False)
         self.details.setPlainText("Graphs loaded. Run a cost to compute a mapping.")
-
-    def _apply_normalized_paths(self, source_path: Path, target_path: Path) -> None:
-        self.source_combo.blockSignals(True)
-        self.target_combo.blockSignals(True)
-        self._ensure_combo_path(self.source_combo, source_path)
-        self._ensure_combo_path(self.target_combo, target_path)
-        self.source_combo.blockSignals(False)
-        self.target_combo.blockSignals(False)
-        self.settings.setValue("source_path", str(source_path))
-        self.settings.setValue("target_path", str(target_path))
 
     def _cost_changed(self) -> None:
         self.cost_options.set_cost(self.current_cost_name)
@@ -463,7 +650,6 @@ class MainWindow(QMainWindow):
         if not isinstance(raw_outcome, RunOutcome):
             return
         outcome = raw_outcome
-        self._apply_normalized_paths(outcome.source_path, outcome.target_path)
         self._outcomes[self._outcome_key(outcome)] = outcome
         if outcome.cost_name == self.current_cost_name:
             self._display_outcome(outcome)

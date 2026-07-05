@@ -109,20 +109,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         common_result: MatchResult | BothMatchResult
 
         if arguments.objective == "both":
-            both_result = matcher.match_both(arguments.cost, **cost_options, )
+            both_result = matcher.match_both(arguments.cost, **cost_options)
             common_result = both_result
-            solutions = {Objective.ADDITIVE.value: _solution_payload(both_result.additive), Objective.BOTTLENECK.value: _solution_payload(both_result.bottleneck), }
+            solutions = {Objective.ADDITIVE.value: _solution_payload(both_result.additive), Objective.BOTTLENECK.value: _solution_payload(both_result.bottleneck)}
             feasible = (both_result.additive is not None and both_result.bottleneck is not None)
         else:
             objective = Objective(arguments.objective)
-            match_result = matcher.match(arguments.cost, objective, **cost_options, )
+            match_result = matcher.match(arguments.cost, objective, **cost_options)
             common_result = match_result
-            solutions = {objective.value: _solution_payload(match_result.solution), }
+            solutions = {objective.value: _solution_payload(match_result.solution)}
             feasible = match_result.solution is not None
     except (OSError, ValueError) as error:
         parser.error(str(error))
 
-    output = (arguments.output if arguments.output is not None else _default_output(arguments.source, arguments.target, arguments.cost, arguments.objective, ))
+    output = (arguments.output if arguments.output is not None else _default_output(arguments.source, arguments.target, arguments.cost, arguments.objective))
     payload = {"schema_version": 1, "source": {"name": source.name, "path": str(arguments.source.resolve()), "vertices": len(source.vertices), "edges": len(source.edges)},
                "target": {"name": target.name, "path": str(arguments.target.resolve()), "vertices": len(target.vertices), "edges": len(target.edges)},
                "parameters": {"cost": arguments.cost, "objective": arguments.objective, "candidate_rho": arguments.candidate_rho, "top_k": arguments.top_k,

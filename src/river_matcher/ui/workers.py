@@ -31,6 +31,19 @@ class LoadedGraph:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphInfo:
+    path: Path
+    name: str
+    vertices: int
+    edges: int
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogOutcome:
+    graphs: tuple[GraphInfo, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class PairKey:
     source: GraphKey
     target: GraphKey
@@ -189,6 +202,39 @@ class PairSessionStore:
     def clear(self) -> None:
         with self._lock:
             self._sessions.clear()
+
+
+class CatalogWorker(QRunnable):
+    """Load graph metadata in the background while warming the graph cache."""
+
+    def __init__(self, repository: GraphRepository, paths: Sequence[Path]) -> None:
+        super().__init__()
+        self.repository = repository
+        self.paths = tuple(paths)
+        self.signals = WorkerSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            graphs: list[GraphInfo] = []
+
+            for index, path in enumerate(self.paths, start=1):
+                self.signals.progress.emit(f"Loading graph catalogue ({index}/{len(self.paths)}): {path.name}")
+                loaded = self.repository.load(path)
+                graphs.append(
+                    GraphInfo(
+                        path=loaded.key.path,
+                        name=loaded.graph.name,
+                        vertices=len(loaded.graph.vertices),
+                        edges=len(loaded.graph.edges),
+                    )
+                )
+
+            self.signals.result.emit(CatalogOutcome(tuple(graphs)))
+        except Exception:
+            self.signals.failed.emit(traceback.format_exc())
+        finally:
+            self.signals.finished.emit()
 
 
 class PreviewWorker(QRunnable):
