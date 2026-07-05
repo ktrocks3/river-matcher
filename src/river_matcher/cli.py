@@ -42,7 +42,7 @@ def _solution_payload(solution: MatchSolution | None) -> dict[str, object]:
 
     mapping = [{"source_vertex": int(source_vertex), "target_vertex": int(target_vertex)} for source_vertex, target_vertex in sorted(solution.mapping.items())]
     edges = [{"edge_id": edge.edge_id, "source_u": edge.source_u, "source_v": edge.source_v, "target_u": edge.target_u, "target_v": edge.target_v, "cost": edge.cost,
-        "witness": edge.witness.tolist()} for edge in solution.edges]
+              "witness": edge.witness.tolist()} for edge in solution.edges]
 
     return {"feasible": True, "objective": solution.objective.value, "value": solution.value, "mapping": mapping, "edges": edges}
 
@@ -53,13 +53,15 @@ def _common_result_payload(result: MatchResult | BothMatchResult) -> dict[str, o
     dp_statistics = result.dp_statistics
 
     return {"cost": result.cost_name.value, "candidate_statistics": {"source_vertices": candidate_statistics.source_vertices, "empty_domains": candidate_statistics.empty_domains,
-        "total_candidates": candidate_statistics.total_candidates, "minimum_candidates": candidate_statistics.minimum_candidates,
-        "maximum_candidates": candidate_statistics.maximum_candidates},
-        "candidate_sets": {str(source_vertex): list(candidates) for source_vertex, candidates in result.candidate_sets.items()},
-        "decomposition": {"width": decomposition.width, "maximum_bag_size": decomposition.maximum_bag_size, "bag_count": decomposition.bag_count,
-            "heuristic": decomposition.heuristic.value, "minimum_fill_width": decomposition.minimum_fill_width, "minimum_degree_width": decomposition.minimum_degree_width},
-        "dynamic_programming": {"enumerated_states": dp_statistics.enumerated_states, "feasible_states": dp_statistics.feasible_states,
-            "message_entries": dp_statistics.message_entries, "unique_cost_requests": dp_statistics.unique_cost_requests}}
+                                                                     "total_candidates": candidate_statistics.total_candidates,
+                                                                     "minimum_candidates": candidate_statistics.minimum_candidates,
+                                                                     "maximum_candidates": candidate_statistics.maximum_candidates},
+            "candidate_sets": {str(source_vertex): list(candidates) for source_vertex, candidates in result.candidate_sets.items()},
+            "decomposition": {"width": decomposition.width, "maximum_bag_size": decomposition.maximum_bag_size, "bag_count": decomposition.bag_count,
+                              "heuristic": decomposition.heuristic.value, "minimum_fill_width": decomposition.minimum_fill_width,
+                              "minimum_degree_width": decomposition.minimum_degree_width},
+            "dynamic_programming": {"enumerated_states": dp_statistics.enumerated_states, "feasible_states": dp_statistics.feasible_states,
+                                    "message_entries": dp_statistics.message_entries, "unique_cost_requests": dp_statistics.unique_cost_requests}}
 
 
 def _default_output(source: Path, target: Path, cost: str, objective: str) -> Path:
@@ -104,30 +106,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         source = load_junction_graph(arguments.source)
         target = load_junction_graph(arguments.target)
         matcher = RiverGraphMatcher(source, target, candidate_rho=arguments.candidate_rho, top_k=arguments.top_k)
+        common_result: MatchResult | BothMatchResult
 
         if arguments.objective == "both":
-            result = matcher.match_both(arguments.cost, **cost_options)
-            solutions = {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck)}
-            feasible = (result.additive is not None and result.bottleneck is not None)
+            both_result = matcher.match_both(arguments.cost, **cost_options, )
+            common_result = both_result
+            solutions = {Objective.ADDITIVE.value: _solution_payload(both_result.additive), Objective.BOTTLENECK.value: _solution_payload(both_result.bottleneck), }
+            feasible = (both_result.additive is not None and both_result.bottleneck is not None)
         else:
             objective = Objective(arguments.objective)
-            result = matcher.match(arguments.cost, objective, **cost_options)
-            solutions = {objective.value: _solution_payload(result.solution)}
-            feasible = result.solution is not None
+            match_result = matcher.match(arguments.cost, objective, **cost_options, )
+            common_result = match_result
+            solutions = {objective.value: _solution_payload(match_result.solution), }
+            feasible = match_result.solution is not None
     except (OSError, ValueError) as error:
         parser.error(str(error))
 
     output = (arguments.output if arguments.output is not None else _default_output(arguments.source, arguments.target, arguments.cost, arguments.objective, ))
     payload = {"schema_version": 1, "source": {"name": source.name, "path": str(arguments.source.resolve()), "vertices": len(source.vertices), "edges": len(source.edges)},
-        "target": {"name": target.name, "path": str(arguments.target.resolve()), "vertices": len(target.vertices), "edges": len(target.edges)},
-        "parameters": {"cost": arguments.cost, "objective": arguments.objective, "candidate_rho": arguments.candidate_rho, "top_k": arguments.top_k,
-            "cost_options": cost_options}, **_common_result_payload(result), "solutions": solutions}
+               "target": {"name": target.name, "path": str(arguments.target.resolve()), "vertices": len(target.vertices), "edges": len(target.edges)},
+               "parameters": {"cost": arguments.cost, "objective": arguments.objective, "candidate_rho": arguments.candidate_rho, "top_k": arguments.top_k,
+                              "cost_options": cost_options}, **_common_result_payload(common_result), "solutions": solutions}
 
     _write_json(output, payload)
 
     print(f"{source.name} ({len(source.vertices)} V, {len(source.edges)} E) -> {target.name} ({len(target.vertices)} V, {len(target.edges)} E)")
     print(f"cost={arguments.cost}, objective={arguments.objective}, feasible={feasible}")
-    print(f"states={result.dp_statistics.enumerated_states}, messages={result.dp_statistics.message_entries}, unique_costs={result.dp_statistics.unique_cost_requests}")
+    print(f"states={common_result.dp_statistics.enumerated_states}, messages={common_result.dp_statistics.message_entries}, "
+          f"unique_costs={common_result.dp_statistics.unique_cost_requests}")
     print(f"output: {output.resolve()}")
 
     return 0 if feasible else 2
