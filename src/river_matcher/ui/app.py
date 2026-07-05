@@ -39,7 +39,7 @@ def _solution_payload(solution: MatchSolution | None) -> dict[str, object]:
     return {"feasible": True, "objective": solution.objective.value, "value": float(solution.value),
             "mapping": [{"source_vertex": int(source), "target_vertex": int(target)} for source, target in sorted(solution.mapping.items())], "edges": [
             {"edge_id": int(edge.edge_id), "source_u": int(edge.source_u), "source_v": int(edge.source_v), "target_u": int(edge.target_u), "target_v": int(edge.target_v),
-             "cost": float(edge.cost), "witness": edge.witness.tolist()} for edge in solution.edges]}
+             "cost": float(edge.cost), "witness": edge.witness.tolist(), } for edge in solution.edges], }
 
 
 def _preflight_payload(preflight: MatchingPreflight | None) -> dict[str, object] | None:
@@ -48,7 +48,7 @@ def _preflight_payload(preflight: MatchingPreflight | None) -> dict[str, object]
 
     return {"empty_domains": preflight.empty_domains, "total_candidates": preflight.total_candidates, "minimum_candidates": preflight.minimum_candidates,
             "maximum_candidates": preflight.maximum_candidates, "estimated_state_upper_bound": preflight.estimated_state_upper_bound,
-            "largest_candidate_product": preflight.largest_candidate_product, "largest_bag": None if preflight.largest_bag is None else sorted(preflight.largest_bag)}
+            "largest_candidate_product": preflight.largest_candidate_product, "largest_bag": None if preflight.largest_bag is None else sorted(preflight.largest_bag), }
 
 
 def _result_payload(outcome: RunOutcome) -> dict[str, object]:
@@ -60,26 +60,36 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
     compatibility = result.compatibility_statistics
 
     return {"schema_version": 2,
-            "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
-            "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
+            "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges), },
+            "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges), },
             "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)}, "candidate_parameters": {"rho": outcome.candidate_rho, "top_k": outcome.top_k},
             "candidate_statistics": {"source_vertices": candidates.source_vertices, "empty_domains": candidates.empty_domains, "total_candidates": candidates.total_candidates,
-                                     "minimum_candidates": candidates.minimum_candidates, "maximum_candidates": candidates.maximum_candidates},
+                                     "minimum_candidates": candidates.minimum_candidates, "maximum_candidates": candidates.maximum_candidates, },
             "effective_candidate_statistics": {"source_vertices": effective.source_vertices, "empty_domains": effective.empty_domains,
                                                "total_candidates": effective.total_candidates, "minimum_candidates": effective.minimum_candidates,
-                                               "maximum_candidates": effective.maximum_candidates},
+                                               "maximum_candidates": effective.maximum_candidates, },
             "candidate_sets": {str(vertex): list(values) for vertex, values in result.candidate_sets.items()},
             "effective_candidate_sets": {str(vertex): list(values) for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()},
             "preflight": _preflight_payload(result.preflight), "effective_preflight": _preflight_payload(result.effective_preflight),
             "compatibility": None if compatibility is None else {"initial_candidates": compatibility.initial_candidates, "remaining_candidates": compatibility.remaining_candidates,
                                                                  "removed_candidates": compatibility.removed_candidates, "revised_arcs": compatibility.revised_arcs,
-                                                                 "empty_domains": compatibility.empty_domains},
+                                                                 "empty_domains": compatibility.empty_domains, },
             "decomposition": {"width": decomposition.width, "maximum_bag_size": decomposition.maximum_bag_size, "bag_count": decomposition.bag_count,
                               "heuristic": decomposition.heuristic.value, "minimum_fill_width": decomposition.minimum_fill_width,
-                              "minimum_degree_width": decomposition.minimum_degree_width},
+                              "minimum_degree_width": decomposition.minimum_degree_width, },
             "dynamic_programming": {"enumerated_states": dp.enumerated_states, "feasible_states": dp.feasible_states, "message_entries": dp.message_entries,
-                                    "unique_cost_requests": dp.unique_cost_requests, "partial_assignments": dp.partial_assignments},
-            "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck)}}
+                                    "unique_cost_requests": dp.unique_cost_requests, "partial_assignments": dp.partial_assignments, },
+            "timing": None if result.timing is None else {"arc_consistency_seconds": result.timing.arc_consistency_seconds,
+                                                          "feasibility_dp_seconds": result.timing.feasibility_dp_seconds, "cost_setup_seconds": result.timing.cost_setup_seconds,
+                                                          "cost_dp_seconds": result.timing.cost_dp_seconds, "materialization_seconds": result.timing.materialization_seconds,
+                                                          "uncached_local_cost_seconds": result.timing.uncached_local_cost_seconds,
+                                                          "uncached_local_cost_calls": result.timing.uncached_local_cost_calls,
+                                                          "local_cost_cache_hits": result.timing.local_cost_cache_hits,
+                                                          "witness_adjacency_seconds": result.timing.witness_adjacency_seconds,
+                                                          "witness_adjacency_builds": result.timing.witness_adjacency_builds,
+                                                          "witness_dijkstra_seconds": result.timing.witness_dijkstra_seconds,
+                                                          "witness_dijkstra_runs": result.timing.witness_dijkstra_runs, "feasibility_reused": result.timing.feasibility_reused, },
+            "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck), }, }
 
 
 class MainWindow(QMainWindow):
@@ -672,6 +682,21 @@ class MainWindow(QMainWindow):
     def _selected_solution(self, result: BothMatchResult) -> MatchSolution | None:
         return result.bottleneck if str(self.objective_combo.currentData()) == Objective.BOTTLENECK.value else result.additive
 
+    @staticmethod
+    def _format_timing(result: BothMatchResult) -> str:
+        timing = result.timing
+
+        if timing is None:
+            return ""
+
+        feasibility = "cached" if timing.feasibility_reused else f"{timing.feasibility_dp_seconds:.3f} s"
+        return (f"\ntiming: arc consistency {timing.arc_consistency_seconds:.3f} s, feasibility DP {feasibility}, "
+                f"cost setup {timing.cost_setup_seconds:.3f} s, cost DP {timing.cost_dp_seconds:.3f} s, "
+                f"materialization {timing.materialization_seconds:.3f} s\n"
+                f"local costs: {timing.uncached_local_cost_calls:,} uncached in {timing.uncached_local_cost_seconds:.3f} s; "
+                f"guided adjacency {timing.witness_adjacency_seconds:.3f} s / {timing.witness_adjacency_builds:,} builds; "
+                f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s / {timing.witness_dijkstra_runs:,} runs")
+
     def _display_outcome(self, outcome: RunOutcome) -> None:
         self._current_outcome = outcome
         result = outcome.result
@@ -691,7 +716,8 @@ class MainWindow(QMainWindow):
                                       "No globally feasible mapping exists for these candidate domains.\n"
                                       f"arc-consistency removed: {pruning} candidates\n"
                                       f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
-                                      f"effective state estimate: {estimate:,}")
+                                      f"effective state estimate: {estimate:,}"
+                                      f"{self._format_timing(result)}")
             self.save_button.setEnabled(True)
             return
 
@@ -707,7 +733,8 @@ class MainWindow(QMainWindow):
                                   f"effective state estimate: {estimate:,}\n"
                                   f"DP: {dp.enumerated_states:,} complete states, {dp.partial_assignments:,} partial assignments, "
                                   f"{dp.message_entries:,} messages, {dp.unique_cost_requests:,} unique local costs\n"
-                                  f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}")
+                                  f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}"
+                                  f"{self._format_timing(result)}")
         self.save_button.setEnabled(True)
 
     def _source_vertex_selected(self, source_vertex: int) -> None:

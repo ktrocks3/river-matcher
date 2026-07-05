@@ -1,22 +1,26 @@
 from __future__ import annotations
 
 import math
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from river_matcher.models import JunctionEdge, JunctionGraph
-from river_matcher.witnesses import ShortestPathWitnessFinder, SourceGuidedWitnessFinder, XYArray
+from river_matcher.witnesses import ShortestPathWitnessFinder, SourceGuidedWitnessFinder, WitnessTiming, XYArray
 
 type FloatArray = NDArray[np.float64]
 type CostRequest = tuple[int, int, int, int, int]
 type CostCache = dict[CostRequest, float]
 type WitnessCache = dict[CostRequest, XYArray | None]
+
+
+_MISSING = object()
 
 
 class CostName(StrEnum):
@@ -28,6 +32,13 @@ class CostName(StrEnum):
     DYNAMIC_TIME_WARPING_DISTANCE = "dynamic_time_warping_distance"
     DISCRETE_FRECHET_DISTANCE = "discrete_frechet_distance"
     NOT_IMPLEMENTED = "test"
+
+
+@dataclass(slots=True)
+class CostTiming:
+    uncached_seconds: float = 0.0
+    uncached_calls: int = 0
+    cache_hits: int = 0
 
 
 @dataclass(slots=True)
@@ -49,6 +60,17 @@ class CostResources:
             self._guided_paths[key] = SourceGuidedWitnessFinder(self.source, self.target, rho=key[0], edge_samples=key[1])
         return self._guided_paths[key]
 
+    def guided_timing(self) -> WitnessTiming:
+        timing = WitnessTiming()
+
+        for finder in self._guided_paths.values():
+            timing.adjacency_seconds += finder.timing.adjacency_seconds
+            timing.adjacency_builds += finder.timing.adjacency_builds
+            timing.dijkstra_seconds += finder.timing.dijkstra_seconds
+            timing.dijkstra_runs += finder.timing.dijkstra_runs
+
+        return timing
+
     def clear_caches(self) -> None:
         self.shortest_path.clear_cache()
         for finder in self._guided_paths.values():
@@ -67,6 +89,7 @@ class BaseEdgeCost(ABC):
         self._target_vertices = set(resources.target.vertices)
         self._cost_cache: CostCache = {}
         self._witness_cache: WitnessCache = {}
+        self.timing = CostTiming()
 
     @staticmethod
     def _request(edge_id: int, source_u: int, source_v: int, target_u: int, target_v: int) -> CostRequest:
@@ -81,13 +104,22 @@ class BaseEdgeCost(ABC):
 
     def __call__(self, edge_id: int, source_u: int, source_v: int, target_u: int, target_v: int) -> float:
         key = self._request(edge_id, source_u, source_v, target_u, target_v)
-        if key in self._cost_cache:
-            return self._cost_cache[key]
+        cached = self._cost_cache.get(key, _MISSING)
+
+        if cached is not _MISSING:
+            self.timing.cache_hits += 1
+            return cast(float, cached)
+
+        started = time.perf_counter()
         value = float(self._compute(key))
+        self.timing.uncached_seconds += time.perf_counter() - started
+        self.timing.uncached_calls += 1
+
         if math.isnan(value):
             value = math.inf
         elif value < 0.0:
             raise RuntimeError(f"{self.name} produced negative cost {value!r} for request {key}.")
+
         self._cost_cache[key] = value
         return value
 
@@ -115,6 +147,7 @@ class BaseEdgeCost(ABC):
     def clear_cache(self) -> None:
         self._cost_cache.clear()
         self._witness_cache.clear()
+        self.timing = CostTiming()
 
     def _source_edge(self, request: CostRequest) -> JunctionEdge | None:
         edge_id, source_u, source_v, _, _ = request

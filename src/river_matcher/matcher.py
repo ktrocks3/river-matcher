@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from operator import index
@@ -33,6 +34,27 @@ class CandidateStatistics:
     total_candidates: int
     minimum_candidates: int
     maximum_candidates: int
+
+
+@dataclass(frozen=True, slots=True)
+class MatchTiming:
+    arc_consistency_seconds: float = 0.0
+    feasibility_dp_seconds: float = 0.0
+    cost_setup_seconds: float = 0.0
+    cost_dp_seconds: float = 0.0
+    materialization_seconds: float = 0.0
+    uncached_local_cost_seconds: float = 0.0
+    uncached_local_cost_calls: int = 0
+    local_cost_cache_hits: int = 0
+    witness_adjacency_seconds: float = 0.0
+    witness_adjacency_builds: int = 0
+    witness_dijkstra_seconds: float = 0.0
+    witness_dijkstra_runs: int = 0
+    feasibility_reused: bool = False
+
+    @property
+    def measured_pipeline_seconds(self) -> float:
+        return (self.arc_consistency_seconds + self.feasibility_dp_seconds + self.cost_setup_seconds + self.cost_dp_seconds + self.materialization_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +90,7 @@ class MatchResult:
     effective_preflight: MatchingPreflight | None = None
     compatibility_statistics: CompatibilityStatistics | None = None
     feasibility_statistics: DPStatistics | None = None
+    timing: MatchTiming | None = None
 
     @property
     def feasible(self) -> bool:
@@ -89,6 +112,7 @@ class BothMatchResult:
     effective_preflight: MatchingPreflight | None = None
     compatibility_statistics: CompatibilityStatistics | None = None
     feasibility_statistics: DPStatistics | None = None
+    timing: MatchTiming | None = None
 
     @property
     def additive_feasible(self) -> bool:
@@ -202,8 +226,8 @@ def _cost_key(name: CostName | str, options: Mapping[str, object]) -> tuple[Cost
 class RiverGraphMatcher:
     """Prepared exact matching problem with reusable pruning, feasibility, cost and path caches."""
 
-    __slots__ = ("candidate_sets", "cost_factory", "decomposition", "preflight", "source", "target", "_compatibility", "_compatibility_statistics", "_costs",
-                 "_effective_candidate_sets", "_effective_preflight", "_feasibility_statistics", "_feasible", "_lock",)
+    __slots__ = ("candidate_sets", "cost_factory", "decomposition", "preflight", "source", "target", "_arc_consistency_seconds", "_compatibility", "_compatibility_statistics",
+                 "_costs", "_effective_candidate_sets", "_effective_preflight", "_feasibility_dp_seconds", "_feasibility_statistics", "_feasible", "_lock",)
 
     def __init__(self, source: JunctionGraph, target: JunctionGraph, *, candidate_rho: float = 10.0, top_k: int = 25, candidate_sets: RawCandidateSets | None = None,
             decomposition: SourceDecomposition | None = None, validate_decomposition: bool = True) -> None:
@@ -222,6 +246,8 @@ class RiverGraphMatcher:
         self.preflight = estimate_matching(self.decomposition, self.candidate_sets)
         self.cost_factory = CostFactory(source, target)
         self._compatibility = TargetConnectivityCompatibility(source, target)
+        self._arc_consistency_seconds = 0.0
+        self._feasibility_dp_seconds = 0.0
         self._effective_candidate_sets: dict[int, tuple[int, ...]] | None = None
         self._compatibility_statistics: CompatibilityStatistics | None = None
         self._effective_preflight: MatchingPreflight | None = None
@@ -257,7 +283,9 @@ class RiverGraphMatcher:
             if progress is not None:
                 progress("Pruning incompatible candidates")
 
+            started = time.perf_counter()
             effective, compatibility_statistics = enforce_arc_consistency(self._compatibility, self.candidate_sets, cancellation_token=cancellation_token)
+            self._arc_consistency_seconds += time.perf_counter() - started
             effective_preflight = estimate_matching(self.decomposition, effective)
 
             if effective_preflight.empty_domains:
@@ -267,7 +295,9 @@ class RiverGraphMatcher:
                 if progress is not None:
                     progress("Checking global feasibility")
 
+                started = time.perf_counter()
                 feasibility = solve_tree_feasibility(self.decomposition, effective, self._compatibility, cancellation_token=cancellation_token)
+                self._feasibility_dp_seconds += time.perf_counter() - started
                 feasible = feasibility.feasible
                 feasibility_statistics = feasibility.statistics
 
@@ -294,44 +324,95 @@ class RiverGraphMatcher:
     def _common_metadata(self) -> dict[str, object]:
         return {"candidate_sets": self.candidate_sets, "candidate_statistics": self.candidate_statistics, "decomposition": self.decomposition,
             "effective_candidate_sets": self.effective_candidate_sets, "effective_candidate_statistics": self.effective_candidate_statistics, "preflight": self.preflight,
-            "effective_preflight": self.effective_preflight, "compatibility_statistics": self._compatibility_statistics, "feasibility_statistics": self._feasibility_statistics}
+            "effective_preflight": self.effective_preflight, "compatibility_statistics": self._compatibility_statistics, "feasibility_statistics": self._feasibility_statistics, }
+
+    def _feasibility_timing(self, arc_before: float, feasibility_before: float, reused: bool) -> MatchTiming:
+        return MatchTiming(arc_consistency_seconds=self._arc_consistency_seconds - arc_before, feasibility_dp_seconds=self._feasibility_dp_seconds - feasibility_before,
+            feasibility_reused=reused)
 
     def match(self, cost_name: CostName | str, objective: Objective | str, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
             **cost_options: object) -> MatchResult:
         resolved_name = CostName(cost_name)
         resolved_objective = Objective(objective)
+        feasibility_reused = self._feasible is not None
+        arc_before = self._arc_consistency_seconds
+        feasibility_before = self._feasibility_dp_seconds
         feasible = self.prepare_feasibility(cancellation_token=cancellation_token, progress=progress)
+        timing = self._feasibility_timing(arc_before, feasibility_before, feasibility_reused)
         metadata = self._common_metadata()
 
         if not feasible:
-            return MatchResult(cost_name=resolved_name, solution=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), **metadata)
+            return MatchResult(cost_name=resolved_name, solution=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing, **metadata)
 
         if progress is not None:
             progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
 
+        started = time.perf_counter()
         edge_cost = self._cost(resolved_name, cost_options)
+        cost_setup_seconds = time.perf_counter() - started
+        cost_before = edge_cost.timing
+        cost_seconds_before = cost_before.uncached_seconds
+        cost_calls_before = cost_before.uncached_calls
+        cost_hits_before = cost_before.cache_hits
+        witness_before = self.cost_factory.resources.guided_timing()
+        started = time.perf_counter()
         result = solve_tree_dp(self.decomposition, self.effective_candidate_sets, edge_cost, resolved_objective, compatibility=self._compatibility,
             cancellation_token=cancellation_token)
+        cost_dp_seconds = time.perf_counter() - started
+        started = time.perf_counter()
         solution = _materialize_solution(self.source, edge_cost, result.solution, cancellation_token=cancellation_token)
-        return MatchResult(cost_name=edge_cost.name, solution=solution, dp_statistics=result.statistics, **metadata)
+        materialization_seconds = time.perf_counter() - started
+        witness_after = self.cost_factory.resources.guided_timing()
+        timing = MatchTiming(arc_consistency_seconds=timing.arc_consistency_seconds, feasibility_dp_seconds=timing.feasibility_dp_seconds, cost_setup_seconds=cost_setup_seconds,
+            cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused)
+        return MatchResult(cost_name=edge_cost.name, solution=solution, dp_statistics=result.statistics, timing=timing, **metadata)
 
     def match_both(self, cost_name: CostName | str, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
             **cost_options: object) -> BothMatchResult:
         resolved_name = CostName(cost_name)
+        feasibility_reused = self._feasible is not None
+        arc_before = self._arc_consistency_seconds
+        feasibility_before = self._feasibility_dp_seconds
         feasible = self.prepare_feasibility(cancellation_token=cancellation_token, progress=progress)
+        timing = self._feasibility_timing(arc_before, feasibility_before, feasibility_reused)
         metadata = self._common_metadata()
 
         if not feasible:
-            return BothMatchResult(cost_name=resolved_name, additive=None, bottleneck=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), **metadata)
+            return BothMatchResult(cost_name=resolved_name, additive=None, bottleneck=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing,
+                **metadata)
 
         if progress is not None:
             progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
 
+        started = time.perf_counter()
         edge_cost = self._cost(resolved_name, cost_options)
+        cost_setup_seconds = time.perf_counter() - started
+        cost_before = edge_cost.timing
+        cost_seconds_before = cost_before.uncached_seconds
+        cost_calls_before = cost_before.uncached_calls
+        cost_hits_before = cost_before.cache_hits
+        witness_before = self.cost_factory.resources.guided_timing()
+        started = time.perf_counter()
         result = solve_tree_dp_both(self.decomposition, self.effective_candidate_sets, edge_cost, compatibility=self._compatibility, cancellation_token=cancellation_token)
+        cost_dp_seconds = time.perf_counter() - started
+        started = time.perf_counter()
         additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token)
         bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token)
-        return BothMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, dp_statistics=result.statistics, **metadata)
+        materialization_seconds = time.perf_counter() - started
+        witness_after = self.cost_factory.resources.guided_timing()
+        timing = MatchTiming(arc_consistency_seconds=timing.arc_consistency_seconds, feasibility_dp_seconds=timing.feasibility_dp_seconds, cost_setup_seconds=cost_setup_seconds,
+            cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused)
+        return BothMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, dp_statistics=result.statistics, timing=timing, **metadata)
 
 
 def match_graphs(source: JunctionGraph, target: JunctionGraph, cost_name: CostName | str, objective: Objective | str, *, candidate_rho: float = 10.0, top_k: int = 25,

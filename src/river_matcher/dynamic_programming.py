@@ -5,7 +5,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from operator import index
-from typing import Protocol
+from typing import Protocol, cast
 
 from river_matcher.cancellation import CancellationToken
 from river_matcher.compatibility import TargetConnectivityCompatibility
@@ -96,6 +96,8 @@ type MessageTable = dict[SeparatorKey, _MessageEntry]
 type ObjectiveMessages = dict[Bag, MessageTable]
 type AllMessages = dict[Objective, ObjectiveMessages]
 
+_MISSING = object()
+
 
 class _CostEvaluator:
     __slots__ = ("_cache", "_cost", "_token")
@@ -110,8 +112,10 @@ class _CostEvaluator:
         return len(self._cache)
 
     def __call__(self, request: CostRequest) -> float:
-        if request in self._cache:
-            return self._cache[request]
+        cached = self._cache.get(request, _MISSING)
+
+        if cached is not _MISSING:
+            return cast(float, cached)
 
         if self._token is not None:
             self._token.check()
@@ -205,7 +209,7 @@ def _assignment_order(plan: BagPlan, candidates: Mapping[int, tuple[int, ...]], 
 
 
 def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...], *,
-        compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, evaluate_costs: bool = True) -> tuple[
+           compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, evaluate_costs: bool = True) -> tuple[
     dict[Objective, DPSolution | None], DPStatistics]:
     if not objectives:
         raise ValueError("At least one objective must be requested.")
@@ -216,6 +220,8 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
     candidates = _normalize_candidate_sets(decomposition, candidate_sets)
     evaluator = _CostEvaluator(edge_cost, cancellation_token)
     messages: AllMessages = {objective: {} for objective in requested}
+    additive_messages = messages.get(Objective.ADDITIVE)
+    bottleneck_messages = messages.get(Objective.BOTTLENECK)
     bag_statistics: list[BagDPStatistics] = []
 
     for bag in decomposition.postorder:
@@ -224,8 +230,20 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
         plan = decomposition.bag_plans[bag]
         tables: dict[Objective, MessageTable] = {objective: {} for objective in requested}
+        additive_table = tables.get(Objective.ADDITIVE)
+        bottleneck_table = tables.get(Objective.BOTTLENECK)
         candidate_lists = tuple(candidates[vertex] for vertex in plan.variables)
-        child_infeasible = any(not messages[objective][child] for objective in requested for child, _ in plan.child_positions)
+        child_specs: list[tuple[tuple[int, ...], MessageTable | None, MessageTable | None]] = []
+        child_infeasible = False
+
+        for child, positions in plan.child_positions:
+            additive_child = None if additive_messages is None else additive_messages[child]
+            bottleneck_child = None if bottleneck_messages is None else bottleneck_messages[child]
+
+            if (need_additive and not additive_child) or (need_bottleneck and not bottleneck_child):
+                child_infeasible = True
+
+            child_specs.append((positions, additive_child, bottleneck_child))
 
         if any(not domain for domain in candidate_lists) or child_infeasible:
             for objective in requested:
@@ -236,21 +254,33 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
         order = _assignment_order(plan, candidates, compatibility)
         order_step = {position: step for step, position in enumerate(order)}
-        assignments: list[int | None] = [None] * len(plan.variables)
-        assigned = [False] * len(plan.variables)
-        edges_at_step: list[list[tuple[int, int, int]]] = [[] for _ in order]
+        assignments = [0] * len(plan.variables)
+        edges_at_step: list[list[tuple[int, int, int, int, int]]] = [[] for _ in order]
 
         if evaluate_costs:
             for edge_id, u_position, v_position in plan.owned_edge_positions:
                 step = max(order_step[u_position], order_step[v_position])
-                edges_at_step[step].append((edge_id, u_position, v_position))
+                edges_at_step[step].append((edge_id, plan.variables[u_position], plan.variables[v_position], u_position, v_position))
 
-        child_checks_at_step: list[list[tuple[Bag, tuple[int, ...]]]] = [[] for _ in order]
+        constrained_positions_at_step: list[tuple[int, ...]] = [()] * len(order)
+        component_by_target: Mapping[int, int] | None = None
 
-        for child, positions in plan.child_positions:
+        if compatibility is not None:
+            component_by_target = compatibility.component_by_target
+
+            for step, position in enumerate(order):
+                neighbors = compatibility.source_neighbors.get(plan.variables[position], ())
+                constrained_positions_at_step[step] = tuple(earlier_position for earlier_position in order[:step] if plan.variables[earlier_position] in neighbors)
+
+        child_checks_at_step: list[list[int]] = [[] for _ in order]
+
+        for child_index, (positions, _, _) in enumerate(child_specs):
             step = max((order_step[position] for position in positions), default=0)
-            child_checks_at_step[step].append((child, positions))
+            child_checks_at_step[step].append(child_index)
 
+        resolved_child_keys: list[SeparatorKey | None] = [None] * len(child_specs)
+        resolved_additive_entries: list[_MessageEntry | None] = [None] * len(child_specs)
+        resolved_bottleneck_entries: list[_MessageEntry | None] = [None] * len(child_specs)
         enumerated_states = 0
         feasible_states = 0
         partial_assignments = 0
@@ -266,95 +296,79 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                 cancellation_token.check()
 
             if step == len(order):
-                state = tuple(int(value) for value in assignments if value is not None)
-
-                if len(state) != len(plan.variables):
-                    raise RuntimeError("Internal state construction failed.")
-
+                state = tuple(assignments)
                 enumerated_states += 1
-                child_keys: list[SeparatorKey] = []
                 total_sum = local_sum
                 total_max = local_max
 
-                for child, positions in plan.child_positions:
-                    child_key = tuple(state[position] for position in positions)
-                    child_keys.append(child_key)
-
+                for child_index in range(len(child_specs)):
                     if need_additive:
-                        additive_entry = messages[Objective.ADDITIVE][child].get(child_key)
+                        additive_entry = resolved_additive_entries[child_index]
 
                         if additive_entry is None:
-                            child_prunes += 1
-                            return
+                            raise RuntimeError("A feasible child entry was not retained until state completion.")
 
                         total_sum += additive_entry.value
 
                     if need_bottleneck:
-                        bottleneck_entry = messages[Objective.BOTTLENECK][child].get(child_key)
+                        bottleneck_entry = resolved_bottleneck_entries[child_index]
 
                         if bottleneck_entry is None:
-                            child_prunes += 1
-                            return
+                            raise RuntimeError("A feasible child entry was not retained until state completion.")
 
                         total_max = max(total_max, bottleneck_entry.value)
 
                 feasible_states += 1
                 parent_key = tuple(state[position] for position in plan.parent_positions)
-                stored_child_keys = tuple(child_keys)
+                stored_child_keys = cast(tuple[SeparatorKey, ...], tuple(resolved_child_keys))
 
                 if need_additive:
-                    previous = tables[Objective.ADDITIVE].get(parent_key)
+                    if additive_table is None:
+                        raise RuntimeError("The additive message table is missing.")
+
+                    previous = additive_table.get(parent_key)
 
                     if _is_better(total_sum, state, previous):
-                        tables[Objective.ADDITIVE][parent_key] = _MessageEntry(total_sum, state, stored_child_keys)
+                        additive_table[parent_key] = _MessageEntry(total_sum, state, stored_child_keys)
 
                 if need_bottleneck:
-                    previous = tables[Objective.BOTTLENECK].get(parent_key)
+                    if bottleneck_table is None:
+                        raise RuntimeError("The bottleneck message table is missing.")
+
+                    previous = bottleneck_table.get(parent_key)
 
                     if _is_better(total_max, state, previous):
-                        tables[Objective.BOTTLENECK][parent_key] = _MessageEntry(total_max, state, stored_child_keys)
+                        bottleneck_table[parent_key] = _MessageEntry(total_max, state, stored_child_keys)
 
                 return
 
             position = order[step]
-            source_vertex = plan.variables[position]
 
             for target_vertex in candidate_lists[position]:
                 partial_assignments += 1
-                compatible = True
 
-                if compatibility is not None:
-                    for other_position, is_assigned in enumerate(assigned):
-                        if not is_assigned:
-                            continue
+                if component_by_target is not None:
+                    target_component = component_by_target.get(target_vertex)
+                    compatible = True
 
+                    for other_position in constrained_positions_at_step[step]:
                         other_target = assignments[other_position]
 
-                        if other_target is None:
-                            continue
-
-                        if not compatibility.supports(source_vertex, target_vertex, plan.variables[other_position], int(other_target)):
+                        if target_vertex == other_target or target_component is None or target_component != component_by_target.get(other_target):
                             compatible = False
                             break
 
-                if not compatible:
-                    compatibility_prunes += 1
-                    continue
+                    if not compatible:
+                        compatibility_prunes += 1
+                        continue
 
                 assignments[position] = target_vertex
-                assigned[position] = True
                 next_sum = local_sum
                 next_max = local_max
                 valid = True
 
-                for edge_id, u_position, v_position in edges_at_step[step]:
-                    target_u = assignments[u_position]
-                    target_v = assignments[v_position]
-
-                    if target_u is None or target_v is None:
-                        raise RuntimeError("Owned edge was evaluated before both endpoints were assigned.")
-
-                    value = evaluator((edge_id, plan.variables[u_position], plan.variables[v_position], int(target_u), int(target_v),))
+                for edge_id, source_u, source_v, u_position, v_position in edges_at_step[step]:
+                    value = evaluator((edge_id, source_u, source_v, assignments[u_position], assignments[v_position]))
 
                     if not math.isfinite(value):
                         valid = False
@@ -364,23 +378,47 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                     next_sum += value
                     next_max = max(next_max, value)
 
+                child_checks = child_checks_at_step[step]
+
                 if valid:
-                    for child, positions in child_checks_at_step[step]:
-                        key = tuple(int(assignments[item]) for item in positions if assignments[item] is not None)
+                    for child_index in child_checks:
+                        positions, additive_child, bottleneck_child = child_specs[child_index]
+                        key = tuple(assignments[item] for item in positions)
+                        resolved_child_keys[child_index] = key
 
-                        if len(key) != len(positions):
-                            continue
+                        if need_additive:
+                            if additive_child is None:
+                                raise RuntimeError("The additive child message table is missing.")
 
-                        if any(key not in messages[objective][child] for objective in requested):
-                            valid = False
+                            additive_entry = additive_child.get(key)
+
+                            if additive_entry is None:
+                                valid = False
+                            else:
+                                resolved_additive_entries[child_index] = additive_entry
+
+                        if valid and need_bottleneck:
+                            if bottleneck_child is None:
+                                raise RuntimeError("The bottleneck child message table is missing.")
+
+                            bottleneck_entry = bottleneck_child.get(key)
+
+                            if bottleneck_entry is None:
+                                valid = False
+                            else:
+                                resolved_bottleneck_entries[child_index] = bottleneck_entry
+
+                        if not valid:
                             child_prunes += 1
                             break
 
                 if valid:
                     visit(step + 1, next_sum, next_max)
 
-                assigned[position] = False
-                assignments[position] = None
+                for child_index in child_checks:
+                    resolved_child_keys[child_index] = None
+                    resolved_additive_entries[child_index] = None
+                    resolved_bottleneck_entries[child_index] = None
 
         visit(0, 0.0, 0.0)
 
@@ -393,7 +431,8 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
             raise RuntimeError(f"Objectives produced different feasible separator keys for bag {tuple(sorted(bag))}.")
 
         bag_statistics.append(BagDPStatistics(bag=bag, enumerated_states=enumerated_states, feasible_states=feasible_states, message_entries=entry_counts.pop(),
-            partial_assignments=partial_assignments, compatibility_prunes=compatibility_prunes, cost_prunes=cost_prunes, child_prunes=child_prunes))
+                                              partial_assignments=partial_assignments, compatibility_prunes=compatibility_prunes, cost_prunes=cost_prunes,
+                                              child_prunes=child_prunes))
 
     statistics = DPStatistics(bags=tuple(bag_statistics), unique_cost_requests=evaluator.unique_requests if evaluate_costs else 0)
     solutions = {objective: _recover_solution(decomposition, messages, objective) for objective in requested}
@@ -401,22 +440,22 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
 
 def solve_tree_feasibility(decomposition: SourceDecomposition, candidate_sets: CandidateSets, compatibility: TargetConnectivityCompatibility, *,
-        cancellation_token: CancellationToken | None = None) -> DPSolveResult:
+                           cancellation_token: CancellationToken | None = None) -> DPSolveResult:
     solutions, statistics = _solve(decomposition, candidate_sets, _ZeroCost(), (Objective.ADDITIVE,), compatibility=compatibility, cancellation_token=cancellation_token,
-        evaluate_costs=False)
+                                   evaluate_costs=False)
     solution = solutions[Objective.ADDITIVE]
     return DPSolveResult(objective=Objective.ADDITIVE, solution=solution, statistics=statistics)
 
 
 def solve_tree_dp(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objective: Objective | str, *,
-        compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None) -> DPSolveResult:
+                  compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None) -> DPSolveResult:
     resolved_objective = Objective(objective)
     solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (resolved_objective,), compatibility=compatibility, cancellation_token=cancellation_token)
     return DPSolveResult(objective=resolved_objective, solution=solutions[resolved_objective], statistics=statistics)
 
 
 def solve_tree_dp_both(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, *, compatibility: TargetConnectivityCompatibility | None = None,
-        cancellation_token: CancellationToken | None = None) -> BothObjectiveResult:
+                       cancellation_token: CancellationToken | None = None) -> BothObjectiveResult:
     solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (Objective.ADDITIVE, Objective.BOTTLENECK), compatibility=compatibility,
-        cancellation_token=cancellation_token)
+                                   cancellation_token=cancellation_token)
     return BothObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK], statistics=statistics)
