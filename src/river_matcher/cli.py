@@ -79,7 +79,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("source", type=Path, help="Source graph export file.")
     parser.add_argument("target", type=Path, help="Target graph export file.")
     parser.add_argument("--cost", required=True, choices=tuple(cost_name.value for cost_name in available_costs()), help="Local source-edge cost method.")
-    parser.add_argument("--objective", choices=(Objective.ADDITIVE.value, Objective.BOTTLENECK.value, "both",), default="both", help="Global optimization objective.")
+    parser.add_argument("--objective", choices=(Objective.ADDITIVE.value, Objective.BOTTLENECK.value, Objective.LENGTH_WEIGHTED_ADDITIVE.value, "both",), default="both",
+                        help="Global optimization objective.")
     parser.add_argument("--candidate-rho", type=float, default=10.0, help="Candidate-generation search radius.")
     parser.add_argument("--top-k", type=int, default=25, help="Maximum candidates retained per source vertex.")
     parser.add_argument("--cost-option", action="append", default=[], metavar="KEY=VALUE", help=("Cost-specific option. May be repeated. Values use JSON syntax "

@@ -29,15 +29,18 @@ class TableCost:
         return self.values.get(request, self.default)
 
 
-def objective_value(source: JunctionGraph, mapping: Mapping[int, int], values: CostTable, objective: Objective) -> float:
+def objective_value(source: JunctionGraph, mapping: Mapping[int, int], values: CostTable, objective: Objective, edge_weights: Mapping[int, float] | None = None) -> float:
+    weights = {} if edge_weights is None else edge_weights
     edge_values: list[float] = []
     for edge in source.edges:
         request = edge.id, edge.u, edge.v, mapping[edge.u], mapping[edge.v]
         value = float(values.get(request, math.inf))
         if not math.isfinite(value):
             return math.inf
-        edge_values.append(value)
+        edge_values.append(weights.get(edge.id, 1.0) * value if objective is Objective.LENGTH_WEIGHTED_ADDITIVE else value)
     if objective is Objective.ADDITIVE:
+        return sum(edge_values)
+    if objective is Objective.LENGTH_WEIGHTED_ADDITIVE:
         return sum(edge_values)
     return max(edge_values, default=0.0)
 
@@ -52,7 +55,8 @@ def make_source(vertices: tuple[int, ...], edges: tuple[EdgeSpec, ...]) -> Junct
     )
 
 
-def brute_force_optimum(source: JunctionGraph, candidate_sets: CandidateSets, values: CostTable, objective: Objective) -> float | None:
+def brute_force_optimum(source: JunctionGraph, candidate_sets: CandidateSets, values: CostTable, objective: Objective,
+                        edge_weights: Mapping[int, float] | None = None) -> float | None:
     vertices = tuple(sorted(source.vertices))
     domains = tuple(tuple(sorted(set(candidate_sets.get(vertex, ())))) for vertex in vertices)
 
@@ -63,13 +67,14 @@ def brute_force_optimum(source: JunctionGraph, candidate_sets: CandidateSets, va
 
     for state in product(*domains):
         mapping = dict(zip(vertices, state, strict=True))
-        best = min(best, objective_value(source, mapping, values, objective))
+        best = min(best, objective_value(source, mapping, values, objective, edge_weights))
 
     return None if not math.isfinite(best) else best
 
 
-def assert_matches_brute_force(source: JunctionGraph, candidate_sets: CandidateSets, values: CostTable, objective: Objective, solution: DPSolution | None) -> None:
-    expected = brute_force_optimum(source, candidate_sets, values, objective)
+def assert_matches_brute_force(source: JunctionGraph, candidate_sets: CandidateSets, values: CostTable, objective: Objective, solution: DPSolution | None,
+                               edge_weights: Mapping[int, float] | None = None) -> None:
+    expected = brute_force_optimum(source, candidate_sets, values, objective, edge_weights)
 
     if expected is None:
         assert solution is None
@@ -83,7 +88,7 @@ def assert_matches_brute_force(source: JunctionGraph, candidate_sets: CandidateS
     for vertex, target in solution.mapping.items():
         assert target in candidate_sets[vertex]
 
-    actual = objective_value(source, solution.mapping, values, objective)
+    actual = objective_value(source, solution.mapping, values, objective, edge_weights)
     assert actual == pytest.approx(expected)
 
 
@@ -145,6 +150,67 @@ def test_single_objective_solvers_match_joint_solver() -> None:
 
     assert additive.solution == both.additive
     assert bottleneck.solution == both.bottleneck
+
+
+def test_length_weighted_additive_uses_edge_weights_without_changing_local_costs() -> None:
+    source = make_source(vertices=(0, 1), edges=((10, 0, 1), (11, 0, 1)))
+    decomposition = build_source_decomposition(source)
+    candidate_sets = {0: (10, 11), 1: (20, 21)}
+    values = {
+        (10, 0, 1, 10, 20): 0.0,
+        (11, 0, 1, 10, 20): 9.0,
+        (10, 0, 1, 11, 21): 5.0,
+        (11, 0, 1, 11, 21): 5.0,
+        (10, 0, 1, 10, 21): 100.0,
+        (11, 0, 1, 10, 21): 100.0,
+        (10, 0, 1, 11, 20): 100.0,
+        (11, 0, 1, 11, 20): 100.0,
+    }
+    edge_weights = {10: 1.0, 11: 10.0}
+
+    result = solve_tree_dp(decomposition, candidate_sets, TableCost(values), Objective.LENGTH_WEIGHTED_ADDITIVE, edge_weights=edge_weights)
+
+    assert_matches_brute_force(source, candidate_sets, values, Objective.LENGTH_WEIGHTED_ADDITIVE, result.solution, edge_weights)
+    assert result.solution is not None
+    assert result.solution.value == pytest.approx(55.0)
+    assert result.solution.mapping == {0: 11, 1: 21}
+
+
+def test_length_weighted_additive_defaults_missing_weights_to_one() -> None:
+    source = make_source(vertices=(0, 1), edges=((10, 0, 1), (11, 0, 1)))
+    decomposition = build_source_decomposition(source)
+    candidate_sets = {0: (10, 11), 1: (20, 21)}
+    values = {
+        (10, 0, 1, 10, 20): 0.0,
+        (11, 0, 1, 10, 20): 9.0,
+        (10, 0, 1, 11, 21): 5.0,
+        (11, 0, 1, 11, 21): 5.0,
+    }
+
+    result = solve_tree_dp(decomposition, candidate_sets, TableCost(values), "length_weighted_additive")
+
+    assert result.solution is not None
+    assert result.solution.value == pytest.approx(9.0)
+    assert result.solution.mapping == {0: 10, 1: 20}
+
+
+def test_length_weighted_additive_combines_child_messages() -> None:
+    source = make_source(vertices=(0, 1, 2), edges=((10, 0, 1), (11, 1, 2)))
+    decomposition = build_source_decomposition(source)
+    candidate_sets = {0: (10, 20), 1: (10, 20), 2: (10, 20)}
+    values = {
+        (edge.id, edge.u, edge.v, target_u, target_v): float((edge.id - 9) * abs(target_u - target_v) // 10 + target_v // 10)
+        for edge in source.edges
+        for target_u in candidate_sets[edge.u]
+        for target_v in candidate_sets[edge.v]
+    }
+    edge_weights = {10: 7.0, 11: 2.0}
+
+    assert decomposition.bag_count > 1
+
+    result = solve_tree_dp(decomposition, candidate_sets, TableCost(values), Objective.LENGTH_WEIGHTED_ADDITIVE, edge_weights=edge_weights)
+
+    assert_matches_brute_force(source, candidate_sets, values, Objective.LENGTH_WEIGHTED_ADDITIVE, result.solution, edge_weights)
 
 
 def test_source_edge_orientation_is_preserved_in_cost_request() -> None:

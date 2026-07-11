@@ -214,7 +214,8 @@ def _assignment_order(plan: BagPlan, candidates: Mapping[int, tuple[int, ...]], 
 
 
 def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...], *,
-           compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, evaluate_costs: bool = True) -> tuple[
+           compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, evaluate_costs: bool = True,
+           edge_weights: Mapping[int, float] | None = None) -> tuple[
     dict[Objective, DPSolution | None], DPStatistics]:
     if not objectives:
         raise ValueError("At least one objective must be requested.")
@@ -222,11 +223,14 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
     requested = tuple(dict.fromkeys(objectives))
     need_additive = Objective.ADDITIVE in requested
     need_bottleneck = Objective.BOTTLENECK in requested
+    need_length_weighted = Objective.LENGTH_WEIGHTED_ADDITIVE in requested
+    weights: dict[int, float] = {} if edge_weights is None else {int(edge_id): float(weight) for edge_id, weight in edge_weights.items()}
     candidates = _normalize_candidate_sets(decomposition, candidate_sets)
     evaluator = _CostEvaluator(edge_cost, cancellation_token)
     messages: AllMessages = {objective: {} for objective in requested}
     additive_messages = messages.get(Objective.ADDITIVE)
     bottleneck_messages = messages.get(Objective.BOTTLENECK)
+    length_weighted_messages = messages.get(Objective.LENGTH_WEIGHTED_ADDITIVE)
     bag_statistics: list[BagDPStatistics] = []
 
     for bag in decomposition.postorder:
@@ -237,18 +241,20 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
         tables: dict[Objective, MessageTable] = {objective: {} for objective in requested}
         additive_table = tables.get(Objective.ADDITIVE)
         bottleneck_table = tables.get(Objective.BOTTLENECK)
+        length_weighted_table = tables.get(Objective.LENGTH_WEIGHTED_ADDITIVE)
         candidate_lists = tuple(candidates[vertex] for vertex in plan.variables)
-        child_specs: list[tuple[tuple[int, ...], MessageTable | None, MessageTable | None]] = []
+        child_specs: list[tuple[tuple[int, ...], MessageTable | None, MessageTable | None, MessageTable | None]] = []
         child_infeasible = False
 
         for child, positions in plan.child_positions:
             additive_child = None if additive_messages is None else additive_messages[child]
             bottleneck_child = None if bottleneck_messages is None else bottleneck_messages[child]
+            length_weighted_child = None if length_weighted_messages is None else length_weighted_messages[child]
 
-            if (need_additive and not additive_child) or (need_bottleneck and not bottleneck_child):
+            if (need_additive and not additive_child) or (need_bottleneck and not bottleneck_child) or (need_length_weighted and not length_weighted_child):
                 child_infeasible = True
 
-            child_specs.append((positions, additive_child, bottleneck_child))
+            child_specs.append((positions, additive_child, bottleneck_child, length_weighted_child))
 
         if any(not domain for domain in candidate_lists) or child_infeasible:
             for objective in requested:
@@ -279,13 +285,14 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
         child_checks_at_step: list[list[int]] = [[] for _ in order]
 
-        for child_index, (positions, _, _) in enumerate(child_specs):
+        for child_index, (positions, _, _, _) in enumerate(child_specs):
             step = max((order_step[position] for position in positions), default=0)
             child_checks_at_step[step].append(child_index)
 
         resolved_child_keys: list[SeparatorKey | None] = [None] * len(child_specs)
         resolved_additive_entries: list[_MessageEntry | None] = [None] * len(child_specs)
         resolved_bottleneck_entries: list[_MessageEntry | None] = [None] * len(child_specs)
+        resolved_length_weighted_entries: list[_MessageEntry | None] = [None] * len(child_specs)
         enumerated_states = 0
         feasible_states = 0
         partial_assignments = 0
@@ -293,7 +300,7 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
         cost_prunes = 0
         child_prunes = 0
 
-        def visit(step: int, local_sum: float, local_max: float) -> None:
+        def visit(step: int, local_sum: float, local_weighted_sum: float, local_max: float) -> None:
             nonlocal enumerated_states, feasible_states, partial_assignments
             nonlocal compatibility_prunes, cost_prunes, child_prunes
 
@@ -304,6 +311,7 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                 state = tuple(assignments)
                 enumerated_states += 1
                 total_sum = local_sum
+                total_weighted_sum = local_weighted_sum
                 total_max = local_max
 
                 for child_index in range(len(child_specs)):
@@ -314,6 +322,14 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                             raise RuntimeError("A feasible child entry was not retained until state completion.")
 
                         total_sum += additive_entry.value
+
+                    if need_length_weighted:
+                        length_weighted_entry = resolved_length_weighted_entries[child_index]
+
+                        if length_weighted_entry is None:
+                            raise RuntimeError("A feasible length-weighted child entry was not retained until state completion.")
+
+                        total_weighted_sum += length_weighted_entry.value
 
                     if need_bottleneck:
                         bottleneck_entry = resolved_bottleneck_entries[child_index]
@@ -335,6 +351,15 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
                     if _is_better(total_sum, state, previous):
                         additive_table[parent_key] = _MessageEntry(total_sum, state, stored_child_keys)
+
+                if need_length_weighted:
+                    if length_weighted_table is None:
+                        raise RuntimeError("The length-weighted message table is missing.")
+
+                    previous = length_weighted_table.get(parent_key)
+
+                    if _is_better(total_weighted_sum, state, previous):
+                        length_weighted_table[parent_key] = _MessageEntry(total_weighted_sum, state, stored_child_keys)
 
                 if need_bottleneck:
                     if bottleneck_table is None:
@@ -369,6 +394,7 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
 
                 assignments[position] = target_vertex
                 next_sum = local_sum
+                next_weighted_sum = local_weighted_sum
                 next_max = local_max
                 valid = True
 
@@ -380,14 +406,16 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                         cost_prunes += 1
                         break
 
+                    weight = weights.get(edge_id, 1.0)
                     next_sum += value
+                    next_weighted_sum += weight * value
                     next_max = max(next_max, value)
 
                 child_checks = child_checks_at_step[step]
 
                 if valid:
                     for child_index in child_checks:
-                        positions, additive_child, bottleneck_child = child_specs[child_index]
+                        positions, additive_child, bottleneck_child, length_weighted_child = child_specs[child_index]
                         key = tuple(assignments[item] for item in positions)
                         resolved_child_keys[child_index] = key
 
@@ -401,6 +429,17 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                                 valid = False
                             else:
                                 resolved_additive_entries[child_index] = additive_entry
+
+                        if valid and need_length_weighted:
+                            if length_weighted_child is None:
+                                raise RuntimeError("The length-weighted child message table is missing.")
+
+                            length_weighted_entry = length_weighted_child.get(key)
+
+                            if length_weighted_entry is None:
+                                valid = False
+                            else:
+                                resolved_length_weighted_entries[child_index] = length_weighted_entry
 
                         if valid and need_bottleneck:
                             if bottleneck_child is None:
@@ -418,14 +457,15 @@ def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, ed
                             break
 
                 if valid:
-                    visit(step + 1, next_sum, next_max)
+                    visit(step + 1, next_sum, next_weighted_sum, next_max)
 
                 for child_index in child_checks:
                     resolved_child_keys[child_index] = None
                     resolved_additive_entries[child_index] = None
                     resolved_bottleneck_entries[child_index] = None
+                    resolved_length_weighted_entries[child_index] = None
 
-        visit(0, 0.0, 0.0)
+        visit(0, 0.0, 0.0, 0.0)
 
         for objective in requested:
             messages[objective][bag] = tables[objective]
@@ -453,9 +493,11 @@ def solve_tree_feasibility(decomposition: SourceDecomposition, candidate_sets: C
 
 
 def solve_tree_dp(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objective: Objective | str, *,
-                  compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None) -> DPSolveResult:
+                  compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None,
+                  edge_weights: Mapping[int, float] | None = None) -> DPSolveResult:
     resolved_objective = Objective(objective)
-    solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (resolved_objective,), compatibility=compatibility, cancellation_token=cancellation_token)
+    solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (resolved_objective,), compatibility=compatibility, cancellation_token=cancellation_token,
+                                   edge_weights=edge_weights)
     return DPSolveResult(objective=resolved_objective, solution=solutions[resolved_objective], statistics=statistics)
 
 

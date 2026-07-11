@@ -70,6 +70,19 @@ def test_match_both_materializes_both_objectives() -> None:
     assert result.dp_statistics.unique_cost_requests == 2
 
 
+def test_length_weighted_match_keeps_unweighted_edge_costs() -> None:
+    source = make_graph("source", {0: (0.0, 0.0), 1: (1.0, 0.0), 2: (11.0, 0.0)}, ((10, 0, 1), (11, 1, 2),))
+    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (7.0, 0.0)}, ((100, 10, 20), (101, 20, 30),))
+    matcher = RiverGraphMatcher(source, target, candidate_sets={0: (10,), 1: (20,), 2: (30,)})
+
+    result = matcher.match(CostName.RELATIVE_LENGTH_ERROR, Objective.LENGTH_WEIGHTED_ADDITIVE)
+
+    assert result.solution is not None
+    assert result.solution.objective is Objective.LENGTH_WEIGHTED_ADDITIVE
+    assert [edge.cost for edge in result.solution.edges] == pytest.approx([1.0, 0.5])
+    assert result.solution.value == pytest.approx(6.0)
+
+
 def test_parallel_source_edges_remain_distinct_in_match_result() -> None:
     source = make_graph("source", {0: (0.0, 0.0), 1: (1.0, 0.0)}, ((11, 0, 1), (10, 0, 1),))
     target = make_graph("target", {10: (0.0, 0.0), 20: (1.0, 0.0)}, ((100, 10, 20),))

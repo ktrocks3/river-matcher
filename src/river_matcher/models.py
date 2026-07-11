@@ -21,6 +21,7 @@ type EdgeCosts = dict[EdgeId, float]
 class Objective(StrEnum):
     ADDITIVE = "additive"
     BOTTLENECK = "bottleneck"
+    LENGTH_WEIGHTED_ADDITIVE = "length_weighted_additive"
 
 
 def _clean_polyline(polyline: XYArray) -> tuple[XYArray, float]:

@@ -219,9 +219,18 @@ def _candidate_statistics(candidate_sets: NormalizedCandidateSets) -> CandidateS
     )
 
 
-def _realized_value(edges: tuple[MatchedEdge, ...], objective: Objective) -> float:
-    values = (edge.cost for edge in edges)
-    return sum(values) if objective is Objective.ADDITIVE else max(values, default=0.0)
+def _edge_weights(source: JunctionGraph) -> dict[int, float]:
+    return {edge.id: edge.length for edge in source.edges}
+
+
+def _realized_value(source: JunctionGraph, edges: tuple[MatchedEdge, ...], objective: Objective) -> float:
+    if objective is Objective.ADDITIVE:
+        return sum(edge.cost for edge in edges)
+
+    if objective is Objective.LENGTH_WEIGHTED_ADDITIVE:
+        return sum(source.edge_by_id[edge.edge_id].length * edge.cost for edge in edges)
+
+    return max((edge.cost for edge in edges), default=0.0)
 
 
 def _materialize_solution(
@@ -280,7 +289,7 @@ def _materialize_solution(
         )
 
     edges = tuple(matched_edges)
-    realized_value = _realized_value(edges, solution.objective)
+    realized_value = _realized_value(source, edges, solution.objective)
 
     if not math.isclose(realized_value, solution.value, rel_tol=1e-10, abs_tol=1e-12):
         raise RuntimeError(
@@ -614,6 +623,7 @@ class RiverGraphMatcher:
             resolved_objective,
             compatibility=self._compatibility,
             cancellation_token=cancellation_token,
+            edge_weights=_edge_weights(self.source),
         )
         cost_dp_seconds = time.perf_counter() - started
         started = time.perf_counter()
