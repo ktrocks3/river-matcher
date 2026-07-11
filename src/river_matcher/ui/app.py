@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-
-from PySide6.QtCore import QLocale, QSettings, QThreadPool, QTimer, Qt
+from PySide6.QtCore import QLocale, QSettings, Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -22,9 +21,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QPlainTextEdit,
     QProgressBar,
+    QPushButton,
     QSpinBox,
     QSplitter,
     QVBoxLayout,
@@ -51,6 +50,7 @@ from river_matcher.ui.workers import (
     PreviewOutcome,
     PreviewWorker,
     RunOutcome,
+    normalize_sparse_to_dense,
 )
 
 _WARN_STATE_LIMIT = 2_000_000
@@ -78,10 +78,7 @@ class ImportedMapping:
 
 
 def _find_graph_directory() -> Path:
-    candidates = (
-        Path.cwd() / "GraphExport",
-        Path(__file__).resolve().parents[3] / "GraphExport",
-    )
+    candidates = (Path.cwd() / "GraphExport", Path(__file__).resolve().parents[3] / "GraphExport")
 
     for candidate in candidates:
         if candidate.is_dir():
@@ -98,10 +95,7 @@ def _solution_payload(solution: MatchSolution | None) -> dict[str, object]:
         "feasible": True,
         "objective": solution.objective.value,
         "value": float(solution.value),
-        "mapping": [
-            {"source_vertex": int(source), "target_vertex": int(target)}
-            for source, target in sorted(solution.mapping.items())
-        ],
+        "mapping": [{"source_vertex": int(source), "target_vertex": int(target)} for source, target in sorted(solution.mapping.items())],
         "edges": [
             {
                 "edge_id": int(edge.edge_id),
@@ -142,18 +136,8 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
 
     return {
         "schema_version": 2,
-        "source": {
-            "path": str(outcome.source_path),
-            "name": outcome.source.name,
-            "vertices": len(outcome.source.vertices),
-            "edges": len(outcome.source.edges),
-        },
-        "target": {
-            "path": str(outcome.target_path),
-            "name": outcome.target.name,
-            "vertices": len(outcome.target.vertices),
-            "edges": len(outcome.target.edges),
-        },
+        "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
+        "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
         "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)},
         "candidate_parameters": {"rho": outcome.candidate_rho, "top_k": outcome.top_k},
         "candidate_statistics": {
@@ -171,10 +155,7 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
             "maximum_candidates": effective.maximum_candidates,
         },
         "candidate_sets": {str(vertex): list(values) for vertex, values in result.candidate_sets.items()},
-        "effective_candidate_sets": {
-            str(vertex): list(values)
-            for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()
-        },
+        "effective_candidate_sets": {str(vertex): list(values) for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()},
         "preflight": _preflight_payload(result.preflight),
         "effective_preflight": _preflight_payload(result.effective_preflight),
         "compatibility": None
@@ -218,10 +199,7 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
             "witness_dijkstra_runs": result.timing.witness_dijkstra_runs,
             "feasibility_reused": result.timing.feasibility_reused,
         },
-        "solutions": {
-            Objective.ADDITIVE.value: _solution_payload(result.additive),
-            Objective.BOTTLENECK.value: _solution_payload(result.bottleneck),
-        },
+        "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck)},
     }
 
 
@@ -260,9 +238,10 @@ class MainWindow(QMainWindow):
         for cost in available_costs():
             self.cost_combo.addItem(cost.value.replace("_", " "), cost.value)
 
-        self.objective_combo = QComboBox()
-        self.objective_combo.addItem("Additive", Objective.ADDITIVE.value)
-        self.objective_combo.addItem("Bottleneck", Objective.BOTTLENECK.value)
+        self.aggregation_combo = QComboBox()
+        self.aggregation_combo.addItem("Sum", Objective.ADDITIVE.value)
+        self.aggregation_combo.addItem("Max", Objective.BOTTLENECK.value)
+        # self.aggregation_combo.addItem("Length-weighted sum", Objective.LENGTH_WEIGHTED_ADDITIVE.value)
 
         self.mapping_mode_combo = QComboBox()
         self.mapping_mode_combo.addItem("Computed optimum", "computed")
@@ -315,14 +294,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, str]:
         options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (
-            str(outcome.source_path.resolve()),
-            str(outcome.target_path.resolve()),
-            float(outcome.candidate_rho),
-            int(outcome.top_k),
-            outcome.cost_name,
-            options,
-        )
+        return (str(outcome.source_path.resolve()), str(outcome.target_path.resolve()), float(outcome.candidate_rho), int(outcome.top_k), outcome.cost_name, options)
 
     def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, str] | None:
         paths = self._selected_paths()
@@ -331,53 +303,26 @@ class MainWindow(QMainWindow):
             return None
 
         options = json.dumps(self.cost_options.options_for(cost_name), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (
-            str(paths[0].resolve()),
-            str(paths[1].resolve()),
-            float(self.candidate_rho.value()),
-            int(self.top_k.value()),
-            cost_name,
-            options,
-        )
+        return (str(paths[0].resolve()), str(paths[1].resolve()), float(self.candidate_rho.value()), int(self.top_k.value()), cost_name, options)
 
     @property
     def _display_mode(self) -> str:
         return str(self.mapping_mode_combo.currentData() or "computed")
 
-    def _mapping_score_key(
-        self,
-        mapping: Mapping[int, int],
-        cost_name: str | None = None,
-    ) -> tuple[str, str, str, str, tuple[tuple[int, int], ...]] | None:
+    def _mapping_score_key(self, mapping: Mapping[int, int], cost_name: str | None = None) -> tuple[str, str, str, str, tuple[tuple[int, int], ...]] | None:
         paths = self._selected_paths()
 
         if paths is None:
             return None
 
         resolved_cost = self.current_cost_name if cost_name is None else cost_name
-        options = json.dumps(
-            self.cost_options.options_for(resolved_cost),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        return (
-            str(paths[0].resolve()),
-            str(paths[1].resolve()),
-            resolved_cost,
-            options,
-            tuple(sorted((int(source), int(target)) for source, target in mapping.items())),
-        )
+        options = json.dumps(self.cost_options.options_for(resolved_cost), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return (str(paths[0].resolve()), str(paths[1].resolve()), resolved_cost, options, tuple(sorted((int(source), int(target)) for source, target in mapping.items())))
 
     def _imported_pair_is_current(self) -> bool:
         imported = self._imported_mapping
         paths = self._selected_paths()
-        return (
-            imported is not None
-            and paths is not None
-            and paths[0].resolve() == imported.source_path.resolve()
-            and paths[1].resolve() == imported.target_path.resolve()
-        )
+        return imported is not None and paths is not None and paths[0].resolve() == imported.source_path.resolve() and paths[1].resolve() == imported.target_path.resolve()
 
     def _current_imported_score(self) -> MappingScoreOutcome | None:
         imported = self._imported_mapping
@@ -406,9 +351,9 @@ class MainWindow(QMainWindow):
         parameters = QGridLayout(parameters_group)
         parameters.addWidget(QLabel("Cost"), 0, 0)
         parameters.addWidget(self.cost_combo, 0, 1)
-        parameters.addWidget(QLabel("Displayed objective"), 0, 2)
-        parameters.addWidget(self.objective_combo, 0, 3)
-        parameters.addWidget(QLabel("Candidate rho"), 1, 0)
+        parameters.addWidget(QLabel("Displayed aggregation"), 0, 2)
+        parameters.addWidget(self.aggregation_combo, 0, 3)
+        parameters.addWidget(QLabel("Candidate radius ρ"), 1, 0)
         parameters.addWidget(self.candidate_rho, 1, 1)
         parameters.addWidget(QLabel("Top-k candidates"), 1, 2)
         parameters.addWidget(self.top_k, 1, 3)
@@ -456,7 +401,7 @@ class MainWindow(QMainWindow):
         self.source_combo.currentIndexChanged.connect(self._source_changed)
         self.target_combo.currentIndexChanged.connect(self._target_changed)
         self.cost_combo.currentIndexChanged.connect(self._cost_changed)
-        self.objective_combo.currentIndexChanged.connect(self._objective_changed)
+        self.aggregation_combo.currentIndexChanged.connect(self._objective_changed)
         self.mapping_mode_combo.currentIndexChanged.connect(self._mapping_mode_changed)
         self.cost_options.optionsChanged.connect(self._cost_options_changed)
         self.run_button.clicked.connect(self._run_selected)
@@ -518,11 +463,7 @@ class MainWindow(QMainWindow):
             previous = Path(str(self.source_combo.currentData())).resolve()
 
         graphs = sorted(
-            (
-                graph
-                for graph in self._graph_catalog.values()
-                if any(other.vertices > graph.vertices for other in self._graph_catalog.values())
-            ),
+            (graph for graph in self._graph_catalog.values() if any(other.vertices > graph.vertices for other in self._graph_catalog.values())),
             key=lambda graph: (graph.vertices, graph.path.name.lower()),
         )
         self.source_combo.blockSignals(True)
@@ -557,7 +498,7 @@ class MainWindow(QMainWindow):
                 self._select_path(self.target_combo, default_target)
 
         self._select_data(self.cost_combo, str(self.settings.value("cost", "relative_length_error")))
-        self._select_data(self.objective_combo, str(self.settings.value("objective", Objective.ADDITIVE.value)))
+        self._select_data(self.aggregation_combo, str(self.settings.value("aggregation", Objective.ADDITIVE.value)))
 
     def _source_changed(self) -> None:
         if self._rebuilding_targets:
@@ -580,9 +521,7 @@ class MainWindow(QMainWindow):
         if self._display_mode == "imported" and not self._imported_pair_is_current():
             self._select_data(self.mapping_mode_combo, "computed")
 
-        self.score_mapping_button.setEnabled(
-            not self._busy and self._display_mode == "imported" and self._imported_pair_is_current()
-        )
+        self.score_mapping_button.setEnabled(not self._busy and self._display_mode == "imported" and self._imported_pair_is_current())
         self.score_label.setText("Score: —")
         self._schedule_preview()
 
@@ -605,13 +544,7 @@ class MainWindow(QMainWindow):
 
         source_group = self._graph_group(source.path)
         valid = [graph for graph in self._graph_catalog.values() if graph.vertices > source.vertices]
-        valid.sort(
-            key=lambda graph: (
-                self._graph_group(graph.path) != source_group,
-                graph.vertices - source.vertices,
-                graph.path.name.lower(),
-            )
-        )
+        valid.sort(key=lambda graph: (self._graph_group(graph.path) != source_group, graph.vertices - source.vertices, graph.path.name.lower()))
         self._rebuilding_targets = True
         self.target_combo.blockSignals(True)
         self.target_combo.clear()
@@ -629,10 +562,7 @@ class MainWindow(QMainWindow):
 
         if valid:
             target = self._graph_catalog[Path(str(self.target_combo.currentData())).resolve()]
-            self.direction_label.setText(
-                f"Sparse-to-dense direction: {source.path.name} ({source.vertices} V) → "
-                f"{target.path.name} ({target.vertices} V)"
-            )
+            self.direction_label.setText(f"Sparse-to-dense direction: {source.path.name} ({source.vertices} V) → {target.path.name} ({target.vertices} V)")
         else:
             self.direction_label.setText("No denser target is available for this source.")
 
@@ -671,12 +601,7 @@ class MainWindow(QMainWindow):
     def _browse_graph(self, combo: QComboBox) -> None:
         current = combo.currentData()
         directory = str(Path(str(current)).parent) if current else str(_find_graph_directory())
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select TopoTide graph",
-            directory,
-            "Graph exports (*.txt);;All files (*)",
-        )
+        filename, _ = QFileDialog.getOpenFileName(self, "Select TopoTide graph", directory, "Graph exports (*.txt);;All files (*)")
 
         if not filename:
             return
@@ -705,9 +630,7 @@ class MainWindow(QMainWindow):
                 if not self._select_path(self.target_combo, info.path):
                     selected = self.target_combo.currentData()
                     selected_name = Path(str(selected)).name if selected else "none"
-                    self.status_label.setText(
-                        f"{info.path.name} is not denser than the selected source; using {selected_name}."
-                    )
+                    self.status_label.setText(f"{info.path.name} is not denser than the selected source; using {selected_name}.")
 
             self._pair_changed()
 
@@ -739,14 +662,8 @@ class MainWindow(QMainWindow):
             return
 
         outcome = raw_outcome
-        self.source_view.set_graph(
-            outcome.source,
-            title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E",
-        )
-        self.target_view.set_graph(
-            outcome.target,
-            title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E",
-        )
+        self.source_view.set_graph(outcome.source, title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E")
+        self.target_view.set_graph(outcome.target, title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E")
         if self._display_mode == "imported" and self._imported_pair_is_current():
             self._display_imported_mapping()
         else:
@@ -772,7 +689,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText("This cost has not been computed for the current pair and parameters.")
 
     def _objective_changed(self) -> None:
-        self.settings.setValue("objective", str(self.objective_combo.currentData()))
+        self.settings.setValue("aggregation", str(self.aggregation_combo.currentData()))
 
         if self._display_mode == "imported":
             self._display_imported_mapping()
@@ -820,19 +737,11 @@ class MainWindow(QMainWindow):
 
         self._select_data(self.mapping_mode_combo, "computed")
         selected = self.current_cost_name
-        names = [selected] + [
-            str(self.cost_combo.itemData(index))
-            for index in range(self.cost_combo.count())
-            if str(self.cost_combo.itemData(index)) != selected
-        ]
+        names = [selected] + [str(self.cost_combo.itemData(index)) for index in range(self.cost_combo.count()) if str(self.cost_combo.itemData(index)) != selected]
         costs = tuple((name, self.cost_options.options_for(name)) for name in names)
         self._begin_run(paths, costs)
 
-    def _begin_run(
-        self,
-        paths: tuple[Path, Path],
-        costs: Sequence[tuple[str, Mapping[str, object]]],
-    ) -> None:
+    def _begin_run(self, paths: tuple[Path, Path], costs: Sequence[tuple[str, Mapping[str, object]]]) -> None:
         if self._busy:
             return
 
@@ -843,15 +752,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
         self.settings.setValue("top_k", self.top_k.value())
 
-        worker = PreflightWorker(
-            self.repository,
-            self.sessions,
-            paths[0],
-            paths[1],
-            candidate_rho=self.candidate_rho.value(),
-            top_k=self.top_k.value(),
-            cancellation_token=token,
-        )
+        worker = PreflightWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(), cancellation_token=token)
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._preflight_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -868,10 +769,7 @@ class MainWindow(QMainWindow):
 
         if preflight.empty_domains:
             QMessageBox.information(
-                self,
-                "No complete candidate mapping",
-                f"{preflight.empty_domains} source vertices have no candidates. "
-                "Increase Candidate rho or Top-k before running a cost.",
+                self, "No complete candidate mapping", f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost."
             )
             self._finish_job("Preflight stopped: empty candidate domains")
             return
@@ -964,11 +862,7 @@ class MainWindow(QMainWindow):
 
     def _worker_failed(self, traceback_text: str) -> None:
         self.details.setPlainText(traceback_text)
-        QMessageBox.critical(
-            self,
-            "River matcher failed",
-            traceback_text.splitlines()[-1] if traceback_text else "Unknown error",
-        )
+        QMessageBox.critical(self, "River matcher failed", traceback_text.splitlines()[-1] if traceback_text else "Unknown error")
 
     def _worker_failed_and_finish(self, traceback_text: str) -> None:
         self._worker_failed(traceback_text)
@@ -1006,20 +900,18 @@ class MainWindow(QMainWindow):
         self.source_browse.setEnabled(not busy)
         self.target_browse.setEnabled(not busy)
         self.cost_combo.setEnabled(not busy)
-        self.objective_combo.setEnabled(not busy)
+        self.aggregation_combo.setEnabled(not busy)
         self.mapping_mode_combo.setEnabled(not busy)
         self.cost_options.setEnabled(not busy)
         self.candidate_rho.setEnabled(not busy)
         self.top_k.setEnabled(not busy)
         self.import_button.setEnabled(not busy)
-        self.score_mapping_button.setEnabled(
-            not busy and self._display_mode == "imported" and self._imported_pair_is_current()
-        )
+        self.score_mapping_button.setEnabled(not busy and self._display_mode == "imported" and self._imported_pair_is_current())
         self.progress.setRange(0, 0 if busy else 1)
         self.progress.setValue(0 if busy else 1)
 
     def _selected_solution(self, result: BothMatchResult) -> MatchSolution | None:
-        return result.bottleneck if str(self.objective_combo.currentData()) == Objective.BOTTLENECK.value else result.additive
+        return result.bottleneck if str(self.aggregation_combo.currentData()) == Objective.BOTTLENECK.value else result.additive
 
     @staticmethod
     def _format_timing(result: BothMatchResult) -> str:
@@ -1042,14 +934,8 @@ class MainWindow(QMainWindow):
         self._current_outcome = outcome
         result = outcome.result
         solution = self._selected_solution(result)
-        self.source_view.set_graph(
-            outcome.source,
-            title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E",
-        )
-        self.target_view.set_graph(
-            outcome.target,
-            title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E",
-        )
+        self.source_view.set_graph(outcome.source, title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E")
+        self.target_view.set_graph(outcome.target, title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E")
         effective = result.effective_candidate_statistics or result.candidate_statistics
         compatibility = result.compatibility_statistics
         pruning = 0 if compatibility is None else compatibility.removed_candidates
@@ -1061,7 +947,7 @@ class MainWindow(QMainWindow):
             self.score_label.setText("Score: infeasible")
             self.details.setPlainText(
                 f"cost: {outcome.cost_name}\n"
-                f"objective: {self.objective_combo.currentData()}\n"
+                f"aggregation: {self.aggregation_combo.currentData()}\n"
                 "No globally feasible mapping exists for these candidate domains.\n"
                 f"arc-consistency removed: {pruning} candidates\n"
                 f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
@@ -1076,7 +962,7 @@ class MainWindow(QMainWindow):
         dp = result.dp_statistics
         self.details.setPlainText(
             f"cost: {outcome.cost_name}\n"
-            f"objective: {solution.objective.value}\n"
+            f"aggregation: {solution.objective.value}\n"
             f"optimal score: {solution.value:.12g}\n"
             f"mapping: {len(solution.mapping)} source vertices\n"
             f"witnesses: {len(solution.edges)} source edges\n"
@@ -1096,18 +982,8 @@ class MainWindow(QMainWindow):
         if imported is None or imported.saved_cost_name != self.current_cost_name:
             return False
 
-        current = json.dumps(
-            self.cost_options.options_for(self.current_cost_name),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        saved = json.dumps(
-            dict(imported.saved_cost_options),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        current = json.dumps(self.cost_options.options_for(self.current_cost_name), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        saved = json.dumps(dict(imported.saved_cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
         return current == saved
 
     def _display_imported_mapping(self) -> None:
@@ -1129,18 +1005,12 @@ class MainWindow(QMainWindow):
         target = self.repository.load(imported.target_path).graph
 
         if self.source_view.graph is not source:
-            self.source_view.set_graph(
-                source,
-                title=f"Source: {source.name} — {len(source.vertices)} V / {len(source.edges)} E",
-            )
+            self.source_view.set_graph(source, title=f"Source: {source.name} — {len(source.vertices)} V / {len(source.edges)} E")
         if self.target_view.graph is not target:
-            self.target_view.set_graph(
-                target,
-                title=f"Target: {target.name} — {len(target.vertices)} V / {len(target.edges)} E",
-            )
+            self.target_view.set_graph(target, title=f"Target: {target.name} — {len(target.vertices)} V / {len(target.edges)} E")
 
         outcome = self._current_imported_score()
-        objective = str(self.objective_combo.currentData())
+        objective = str(self.aggregation_combo.currentData())
 
         if outcome is not None:
             evaluation = outcome.evaluation
@@ -1179,18 +1049,14 @@ class MainWindow(QMainWindow):
             )
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
             self.target_view.set_witnesses(imported.saved_edges)
-            value = (
-                imported.saved_bottleneck_value
-                if objective == Objective.BOTTLENECK.value
-                else imported.saved_additive_value
-            )
+            value = imported.saved_bottleneck_value if objective == Objective.BOTTLENECK.value else imported.saved_additive_value
             value_text = "—" if value is None else f"{value:.12g}"
             self.score_label.setText(f"Imported φ {objective}: {value_text}")
             self.details.setPlainText(
                 f"displayed mapping: imported φ from {imported.json_path.name}\n"
                 f"mapping: {len(imported.mapping)} source vertices\n"
                 f"saved cost: {imported.saved_cost_name}\n"
-                f"saved mapping objective: {imported.saved_objective or 'unknown'}\n"
+                f"saved mapping aggregation: {imported.saved_objective or 'unknown'}\n"
                 f"additive score from saved local costs: "
                 f"{imported.saved_additive_value if imported.saved_additive_value is not None else 'unknown'}\n"
                 f"bottleneck score from saved local costs: "
@@ -1274,19 +1140,14 @@ class MainWindow(QMainWindow):
         edge = next((item for item in edges if item.edge_id == edge_id), None)
 
         if edge is None:
-            self.details.appendPlainText(
-                f"\nsource edge e{edge_id}: no witness is currently loaded for the displayed mapping and cost"
-            )
+            self.details.appendPlainText(f"\nsource edge e{edge_id}: no witness is currently loaded for the displayed mapping and cost")
             return
 
         self.source_view.highlight_edge(edge_id)
         self.source_view.highlight_fraction(edge_id, fraction)
         self.target_view.highlight_edge(edge_id, witness=True)
         self.target_view.highlight_fraction(edge_id, fraction, witness=True)
-        self.details.appendPlainText(
-            f"\nsource edge e{edge_id} at {fraction:.1%} maps along its witness at {fraction:.1%}; "
-            f"local cost={edge.cost:.12g}"
-        )
+        self.details.appendPlainText(f"\nsource edge e{edge_id} at {fraction:.1%} maps along its witness at {fraction:.1%}; local cost={edge.cost:.12g}")
 
     def _target_witness_selected(self, edge_id: int, fraction: float) -> None:
         displayed = self._displayed_mapping_and_edges()
@@ -1319,10 +1180,7 @@ class MainWindow(QMainWindow):
 
         path = Path(filename)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(_result_payload(outcome), indent=2, sort_keys=True, allow_nan=False) + "\n",
-            encoding="utf-8",
-        )
+        path.write_text(json.dumps(_result_payload(outcome), indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
         self.status_label.setText(f"Saved {path}")
 
     @staticmethod
@@ -1392,33 +1250,20 @@ class MainWindow(QMainWindow):
 
         for info in self._graph_catalog.values():
             name_match = (expected_file and info.path.name == expected_file) or (expected_name and info.name == expected_name)
-            count_match = (
-                (expected_vertices is None or info.vertices == int(expected_vertices))
-                and (expected_edges is None or info.edges == int(expected_edges))
-            )
+            count_match = (expected_vertices is None or info.vertices == int(expected_vertices)) and (expected_edges is None or info.edges == int(expected_edges))
             if name_match and count_match:
                 matches.append(info.path)
 
         if len(matches) == 1:
             return matches[0].resolve()
 
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            f"Locate imported {role} graph",
-            str(json_path.parent),
-            "Graph exports (*.txt);;All files (*)",
-        )
+        filename, _ = QFileDialog.getOpenFileName(self, f"Locate imported {role} graph", str(json_path.parent), "Graph exports (*.txt);;All files (*)")
         if not filename:
             raise ValueError(f"Could not locate the imported {role} graph.")
         return Path(filename).resolve()
 
     def _import_result(self) -> None:
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import match result",
-            str(Path.cwd() / "results"),
-            "JSON files (*.json);;All files (*)",
-        )
+        filename, _ = QFileDialog.getOpenFileName(self, "Import match result", str(Path.cwd() / "results"), "JSON files (*.json);;All files (*)")
         if not filename:
             return
 
@@ -1450,19 +1295,11 @@ class MainWindow(QMainWindow):
                 if len(available) == 1:
                     chosen_objective, chosen_solution = available[0]
                 else:
-                    labels = [
-                        f"{objective} — score {float(solution.get('value', math.nan)):.12g}"
-                        for objective, solution in available
-                    ]
-                    preferred = str(self.objective_combo.currentData())
+                    labels = [f"{objective} — score {float(solution.get('value', math.nan)):.12g}" for objective, solution in available]
+                    preferred = str(self.aggregation_combo.currentData())
                     default_index = next((i for i, item in enumerate(available) if item[0] == preferred), 0)
                     selected, accepted = QInputDialog.getItem(
-                        self,
-                        "Choose mapping",
-                        "The JSON contains two optimized mappings. Which φ should be imported?",
-                        labels,
-                        default_index,
-                        False,
+                        self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels, default_index, False
                     )
                     if not accepted:
                         return
@@ -1497,18 +1334,8 @@ class MainWindow(QMainWindow):
             if unknown_targets:
                 raise ValueError(f"Imported mapping contains unknown target vertices {unknown_targets}.")
 
-            self._graph_catalog[source_path] = GraphInfo(
-                source_path,
-                normalized_source.graph.name,
-                len(normalized_source.graph.vertices),
-                len(normalized_source.graph.edges),
-            )
-            self._graph_catalog[target_path] = GraphInfo(
-                target_path,
-                normalized_target.graph.name,
-                len(normalized_target.graph.vertices),
-                len(normalized_target.graph.edges),
-            )
+            self._graph_catalog[source_path] = GraphInfo(source_path, normalized_source.graph.name, len(normalized_source.graph.vertices), len(normalized_source.graph.edges))
+            self._graph_catalog[target_path] = GraphInfo(target_path, normalized_target.graph.name, len(normalized_target.graph.vertices), len(normalized_target.graph.edges))
 
             cost_payload = payload.get("cost")
             saved_cost_name = None
@@ -1601,12 +1428,7 @@ class MainWindow(QMainWindow):
         if not isinstance(raw_outcome, MappingScoreOutcome):
             return
 
-        options = json.dumps(
-            dict(raw_outcome.cost_options),
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        options = json.dumps(dict(raw_outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
         key = (
             str(raw_outcome.source_path.resolve()),
             str(raw_outcome.target_path.resolve()),
@@ -1644,7 +1466,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
         self.settings.setValue("top_k", self.top_k.value())
         self.settings.setValue("cost", self.current_cost_name)
-        self.settings.setValue("objective", str(self.objective_combo.currentData()))
+        self.settings.setValue("aggregation", str(self.aggregation_combo.currentData()))
         getattr(event, "accept")()
 
 

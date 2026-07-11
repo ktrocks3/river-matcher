@@ -24,6 +24,11 @@ class EdgeCost(Protocol):
 class Objective(StrEnum):
     ADDITIVE = "additive"
     BOTTLENECK = "bottleneck"
+    LENGTH_WEIGHTED_ADDITIVE = "length_weighted_additive"
+
+    @property
+    def display_name(self) -> str:
+        return {Objective.ADDITIVE: "Sum", Objective.BOTTLENECK: "Max", Objective.LENGTH_WEIGHTED_ADDITIVE: "Length-weighted sum"}[self]
 
 
 @dataclass(frozen=True, slots=True)
