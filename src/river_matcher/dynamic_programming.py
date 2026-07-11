@@ -91,6 +91,14 @@ class BothObjectiveResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AllObjectiveResult:
+    additive: DPSolution | None
+    bottleneck: DPSolution | None
+    length_weighted_additive: DPSolution | None
+    statistics: DPStatistics
+
+
+@dataclass(frozen=True, slots=True)
 class _MessageEntry:
     value: float
     state: State
@@ -506,3 +514,30 @@ def solve_tree_dp_both(decomposition: SourceDecomposition, candidate_sets: Candi
     solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, (Objective.ADDITIVE, Objective.BOTTLENECK), compatibility=compatibility,
                                    cancellation_token=cancellation_token)
     return BothObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK], statistics=statistics)
+
+
+def solve_tree_dp_all(
+    decomposition: SourceDecomposition,
+    candidate_sets: CandidateSets,
+    edge_cost: EdgeCost,
+    *,
+    edge_weights: Mapping[int, float],
+    compatibility: TargetConnectivityCompatibility | None = None,
+    cancellation_token: CancellationToken | None = None,
+) -> AllObjectiveResult:
+    objectives = (Objective.ADDITIVE, Objective.BOTTLENECK, Objective.LENGTH_WEIGHTED_ADDITIVE)
+    solutions, statistics = _solve(
+        decomposition,
+        candidate_sets,
+        edge_cost,
+        objectives,
+        compatibility=compatibility,
+        cancellation_token=cancellation_token,
+        edge_weights=edge_weights,
+    )
+    return AllObjectiveResult(
+        additive=solutions[Objective.ADDITIVE],
+        bottleneck=solutions[Objective.BOTTLENECK],
+        length_weighted_additive=solutions[Objective.LENGTH_WEIGHTED_ADDITIVE],
+        statistics=statistics,
+    )

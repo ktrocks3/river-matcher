@@ -179,14 +179,27 @@ def subdivide_graph_adaptive_closest_points(
 
 
 def prepare_candidate_target(
-    source: JunctionGraph, target: JunctionGraph, *, candidate_mode: CandidateMode | str, rho: float, subdivision_points: int = 2, adaptive_min_separation: float = 1.0,
+    source: JunctionGraph,
+    target: JunctionGraph,
+    *,
+    candidate_mode: CandidateMode | str,
+    rho: float,
+    subdivision_points: int = 2,
+    adaptive_max_points_per_source: int = 8,
+    adaptive_min_separation: float = 1.0,
 ) -> JunctionGraph:
     """Build the exact target graph whose vertices form the candidate universe."""
     mode = CandidateMode(candidate_mode)
     if mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION:
         return subdivide_graph_uniform(target, samples_per_edge=subdivision_points)
     if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS:
-        return subdivide_graph_adaptive_closest_points(source, target, rho=rho, min_separation=adaptive_min_separation)
+        return subdivide_graph_adaptive_closest_points(
+            source,
+            target,
+            rho=rho,
+            max_points_per_source=adaptive_max_points_per_source,
+            min_separation=adaptive_min_separation,
+        )
     return target
 
 
@@ -347,6 +360,28 @@ def compute_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho:
         return {int(vertex): [] for vertex in source_ids}
     distances = _candidate_edge_distances_numba(source_points, bboxes, segment_starts, segment_vectors, segment_squared_lengths, edge_offsets, radius)
     return _candidate_sets_from_distances(source_ids, endpoints, distances, rho=radius, top_k=limit)
+
+
+def compute_vertex_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho: float = 10.0, top_k: int = 25) -> CandidateSets:
+    """Rank existing target vertices by point-to-point distance."""
+    radius, limit = _normalize_parameters(rho, top_k)
+    target_ids = np.asarray(sorted(target.vertices), dtype=np.int64)
+    target_points = np.asarray([target.coordinates[int(vertex)] for vertex in target_ids], dtype=np.float64)
+    candidate_sets: CandidateSets = {}
+
+    for source_vertex in sorted(source.vertices):
+        point = np.asarray(source.coordinates[source_vertex], dtype=np.float64)
+        distances = np.linalg.norm(target_points - point, axis=1)
+        ordered = sorted(
+            (
+                (float(distances[index]), int(target_ids[index]))
+                for index in range(len(target_ids))
+                if float(distances[index]) <= radius
+            ),
+            key=lambda item: (item[0], item[1]),
+        )
+        candidate_sets[source_vertex] = [vertex for _, vertex in ordered[:limit]]
+    return candidate_sets
 
 
 def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> float:

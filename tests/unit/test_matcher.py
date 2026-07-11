@@ -70,6 +70,31 @@ def test_match_both_materializes_both_objectives() -> None:
     assert result.dp_statistics.unique_cost_requests == 2
 
 
+def test_match_all_materializes_three_aggregations() -> None:
+    source, target = make_graphs()
+    matcher = RiverGraphMatcher(source, target, candidate_sets=perfect_candidates())
+
+    result = matcher.match_all("relative_length_error")
+
+    assert result.additive is not None
+    assert result.bottleneck is not None
+    assert result.length_weighted_additive is not None
+    assert result.length_weighted_additive.objective is Objective.LENGTH_WEIGHTED_ADDITIVE
+    assert result.length_weighted_additive.value == pytest.approx(0.0)
+
+
+def test_mapping_evaluation_includes_length_weighted_additive_value() -> None:
+    source = make_graph("source", {0: (0.0, 0.0), 1: (1.0, 0.0), 2: (11.0, 0.0)}, ((10, 0, 1), (11, 1, 2),))
+    target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (7.0, 0.0)}, ((100, 10, 20), (101, 20, 30),))
+    matcher = RiverGraphMatcher(source, target, candidate_sets={0: (10,), 1: (20,), 2: (30,)})
+
+    evaluation = matcher.evaluate_mapping({0: 10, 1: 20, 2: 30}, CostName.RELATIVE_LENGTH_ERROR)
+
+    assert evaluation.additive_value == pytest.approx(1.5)
+    assert evaluation.bottleneck_value == pytest.approx(1.0)
+    assert evaluation.length_weighted_additive_value == pytest.approx(6.0)
+
+
 def test_length_weighted_match_keeps_unweighted_edge_costs() -> None:
     source = make_graph("source", {0: (0.0, 0.0), 1: (1.0, 0.0), 2: (11.0, 0.0)}, ((10, 0, 1), (11, 1, 2),))
     target = make_graph("target", {10: (0.0, 0.0), 20: (2.0, 0.0), 30: (7.0, 0.0)}, ((100, 10, 20), (101, 20, 30),))

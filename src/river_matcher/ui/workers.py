@@ -12,9 +12,9 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from river_matcher.cancellation import CancellationToken, OperationCancelled
-from river_matcher.candidates import CandidateMode, prepare_candidate_target
+from river_matcher.candidates import CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target
 from river_matcher.costs.base import CostName
-from river_matcher.matcher import BothMatchResult, MappingEvaluation, RiverGraphMatcher
+from river_matcher.matcher import AggregationMatchResult, MappingEvaluation, RiverGraphMatcher
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
 from river_matcher.preprocessing import load_embedded_graph, load_junction_graph
@@ -55,6 +55,7 @@ class PairKey:
     top_k: int
     candidate_mode: CandidateMode
     subdivision_points: int
+    adaptive_max_points_per_source: int
     adaptive_min_separation: float
 
 
@@ -84,6 +85,7 @@ class PreflightOutcome:
     top_k: int
     candidate_mode: CandidateMode
     subdivision_points: int
+    adaptive_max_points_per_source: int
     adaptive_min_separation: float
     preflight: MatchingPreflight
 
@@ -100,8 +102,9 @@ class RunOutcome:
     top_k: int
     candidate_mode: CandidateMode
     subdivision_points: int
+    adaptive_max_points_per_source: int
     adaptive_min_separation: float
-    result: BothMatchResult
+    result: AggregationMatchResult
     swapped: bool
     from_cache: bool
     elapsed_seconds: float
@@ -117,6 +120,7 @@ class MappingScoreOutcome:
     cost_options: Mapping[str, object]
     candidate_mode: CandidateMode
     subdivision_points: int
+    adaptive_max_points_per_source: int
     adaptive_min_separation: float
     mapping: Mapping[int, int]
     evaluation: MappingEvaluation
@@ -224,11 +228,18 @@ class PairSession:
         top_k: int,
         candidate_mode: CandidateMode | str,
         subdivision_points: int,
+        adaptive_max_points_per_source: int,
         adaptive_min_separation: float,
     ) -> None:
         mode = CandidateMode(candidate_mode)
         matching_target = prepare_candidate_target(
-            source.graph, target.graph, candidate_mode=mode, rho=candidate_rho, subdivision_points=subdivision_points, adaptive_min_separation=adaptive_min_separation,
+            source.graph,
+            target.graph,
+            candidate_mode=mode,
+            rho=candidate_rho,
+            subdivision_points=subdivision_points,
+            adaptive_max_points_per_source=adaptive_max_points_per_source,
+            adaptive_min_separation=adaptive_min_separation,
         )
         self.source = source
         self.target = LoadedGraph(target.key, matching_target)
@@ -236,9 +247,15 @@ class PairSession:
         self.top_k = top_k
         self.candidate_mode = mode
         self.subdivision_points = int(subdivision_points)
+        self.adaptive_max_points_per_source = int(adaptive_max_points_per_source)
         self.adaptive_min_separation = float(adaptive_min_separation)
-        self.matcher = RiverGraphMatcher(source.graph, matching_target, candidate_rho=candidate_rho, top_k=top_k)
-        self._results: dict[CostKey, BothMatchResult] = {}
+        candidate_sets = (
+            compute_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k)
+            if mode is CandidateMode.TARGET_JUNCTIONS
+            else compute_vertex_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k)
+        )
+        self.matcher = RiverGraphMatcher(source.graph, matching_target, candidate_sets=candidate_sets)
+        self._results: dict[CostKey, AggregationMatchResult] = {}
         self._mapping_evaluations: dict[MappingEvaluationKey, MappingEvaluation] = {}
         self._lock = threading.RLock()
 
@@ -248,7 +265,7 @@ class PairSession:
 
     def match(
         self, cost_name: str, options: Mapping[str, object], *, cancellation_token: CancellationToken, progress: Callable[[str], None] | None = None,
-    ) -> tuple[BothMatchResult, bool, float]:
+    ) -> tuple[AggregationMatchResult, bool, float]:
         key = CostKey(cost_name, _canonical_options(options))
 
         with self._lock:
@@ -259,7 +276,7 @@ class PairSession:
 
             cancellation_token.check()
             started = time.perf_counter()
-            result = self.matcher.match_both(cost_name, cancellation_token=cancellation_token, progress=progress, **dict(options))
+            result = self.matcher.match_all(cost_name, cancellation_token=cancellation_token, progress=progress, **dict(options))
             elapsed = time.perf_counter() - started
             cancellation_token.check()
             self._results[key] = result
@@ -303,10 +320,20 @@ class PairSessionStore:
         top_k: int,
         candidate_mode: CandidateMode | str,
         subdivision_points: int,
+        adaptive_max_points_per_source: int,
         adaptive_min_separation: float,
     ) -> PairSession:
         mode = CandidateMode(candidate_mode)
-        key = PairKey(source.key, target.key, float(candidate_rho), int(top_k), mode, int(subdivision_points), float(adaptive_min_separation))
+        key = PairKey(
+            source.key,
+            target.key,
+            float(candidate_rho),
+            int(top_k),
+            mode,
+            int(subdivision_points),
+            int(adaptive_max_points_per_source),
+            float(adaptive_min_separation),
+        )
 
         with self._lock:
             existing = self._sessions.get(key)
@@ -316,7 +343,14 @@ class PairSessionStore:
                 return existing
 
         session = PairSession(
-            source, target, candidate_rho=candidate_rho, top_k=top_k, candidate_mode=mode, subdivision_points=subdivision_points, adaptive_min_separation=adaptive_min_separation,
+            source,
+            target,
+            candidate_rho=candidate_rho,
+            top_k=top_k,
+            candidate_mode=mode,
+            subdivision_points=subdivision_points,
+            adaptive_max_points_per_source=adaptive_max_points_per_source,
+            adaptive_min_separation=adaptive_min_separation,
         )
 
         with self._lock:
@@ -399,6 +433,7 @@ class PreflightWorker(QRunnable):
         top_k: int,
         candidate_mode: CandidateMode | str,
         subdivision_points: int,
+        adaptive_max_points_per_source: int,
         adaptive_min_separation: float,
         cancellation_token: CancellationToken,
     ) -> None:
@@ -411,6 +446,7 @@ class PreflightWorker(QRunnable):
         self.top_k = top_k
         self.candidate_mode = CandidateMode(candidate_mode)
         self.subdivision_points = subdivision_points
+        self.adaptive_max_points_per_source = adaptive_max_points_per_source
         self.adaptive_min_separation = adaptive_min_separation
         self.cancellation_token = cancellation_token
         self.signals = WorkerSignals()
@@ -429,6 +465,7 @@ class PreflightWorker(QRunnable):
                 top_k=self.top_k,
                 candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points,
+                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                 adaptive_min_separation=self.adaptive_min_separation,
             )
             self.cancellation_token.check()
@@ -442,6 +479,7 @@ class PreflightWorker(QRunnable):
                     top_k=self.top_k,
                     candidate_mode=self.candidate_mode,
                     subdivision_points=self.subdivision_points,
+                    adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                     adaptive_min_separation=self.adaptive_min_separation,
                     preflight=session.preflight,
                 ),
@@ -466,6 +504,7 @@ class MatchWorker(QRunnable):
         top_k: int,
         candidate_mode: CandidateMode | str,
         subdivision_points: int,
+        adaptive_max_points_per_source: int,
         adaptive_min_separation: float,
         costs: Sequence[tuple[str, Mapping[str, object]]],
         cancellation_token: CancellationToken,
@@ -479,6 +518,7 @@ class MatchWorker(QRunnable):
         self.top_k = top_k
         self.candidate_mode = CandidateMode(candidate_mode)
         self.subdivision_points = subdivision_points
+        self.adaptive_max_points_per_source = adaptive_max_points_per_source
         self.adaptive_min_separation = adaptive_min_separation
         self.costs = tuple(costs)
         self.cancellation_token = cancellation_token
@@ -496,6 +536,7 @@ class MatchWorker(QRunnable):
                 top_k=self.top_k,
                 candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points,
+                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                 adaptive_min_separation=self.adaptive_min_separation,
             )
 
@@ -519,6 +560,7 @@ class MatchWorker(QRunnable):
                         top_k=self.top_k,
                         candidate_mode=self.candidate_mode,
                         subdivision_points=self.subdivision_points,
+                        adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                         adaptive_min_separation=self.adaptive_min_separation,
                         result=result,
                         swapped=swapped,
@@ -546,6 +588,7 @@ class MappingScoreWorker(QRunnable):
         top_k: int,
         candidate_mode: CandidateMode | str,
         subdivision_points: int,
+        adaptive_max_points_per_source: int,
         adaptive_min_separation: float,
         mapping: Mapping[int, int],
         cost_name: str,
@@ -561,6 +604,7 @@ class MappingScoreWorker(QRunnable):
         self.top_k = top_k
         self.candidate_mode = CandidateMode(candidate_mode)
         self.subdivision_points = subdivision_points
+        self.adaptive_max_points_per_source = adaptive_max_points_per_source
         self.adaptive_min_separation = adaptive_min_separation
         self.mapping = dict(mapping)
         self.cost_name = cost_name
@@ -580,6 +624,7 @@ class MappingScoreWorker(QRunnable):
                 top_k=self.top_k,
                 candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points,
+                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                 adaptive_min_separation=self.adaptive_min_separation,
             )
 
@@ -599,6 +644,7 @@ class MappingScoreWorker(QRunnable):
                     cost_options=self.cost_options,
                     candidate_mode=self.candidate_mode,
                     subdivision_points=self.subdivision_points,
+                    adaptive_max_points_per_source=self.adaptive_max_points_per_source,
                     adaptive_min_separation=self.adaptive_min_separation,
                     mapping=self.mapping,
                     evaluation=evaluation,

@@ -9,6 +9,7 @@ from river_matcher.candidates import (
     CandidateMode,
     compute_candidate_sets,
     compute_candidate_sets_reference,
+    compute_vertex_candidate_sets,
     point_at_fraction,
     subdivide_graph_adaptive_closest_points,
     subdivide_graph_uniform,
@@ -49,6 +50,16 @@ def test_adaptive_subdivision_inserts_deduplicated_closest_points() -> None:
     assert subdivided.coordinates[21] == pytest.approx((3.0, 0.0))
     assert [(edge.u, edge.v) for edge in subdivided.edges] == [(10, 21), (21, 20)]
     assert 21 in compute_candidate_sets(source, subdivided, rho=2.0, top_k=10)[1]
+
+
+def test_adaptive_closest_point_is_first_vertex_candidate() -> None:
+    source = JunctionGraph("source", {1: (3.0, 1.0)}, ())
+    target = JunctionGraph("target", {10: (0.0, 0.0), 20: (10.0, 0.0)}, (JunctionEdge(5, 10, 20, np.asarray([(0.0, 0.0), (10.0, 0.0)])),))
+    transformed = subdivide_graph_adaptive_closest_points(source, target, rho=2.0, min_separation=0.0)
+
+    candidates = compute_vertex_candidate_sets(source, transformed, rho=2.0, top_k=1)
+
+    assert candidates[1] == [21]
 
 
 def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -> JunctionEdge:

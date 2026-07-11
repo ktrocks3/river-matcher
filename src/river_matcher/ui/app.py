@@ -34,7 +34,7 @@ from river_matcher.cancellation import CancellationToken
 from river_matcher.candidates import CandidateMode, prepare_candidate_target
 from river_matcher.costs import available_costs
 from river_matcher.dynamic_programming import Objective
-from river_matcher.matcher import BothMatchResult, MatchedEdge, MatchSolution
+from river_matcher.matcher import AggregationMatchResult, MatchedEdge, MatchSolution
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
@@ -68,6 +68,7 @@ class ImportedMapping:
     target_graph: JunctionGraph
     candidate_mode: CandidateMode
     subdivision_points: int
+    adaptive_max_points_per_source: int
     adaptive_min_separation: float
     mapping: Mapping[int, int]
     saved_cost_name: str | None
@@ -77,6 +78,7 @@ class ImportedMapping:
     saved_edges: tuple[MatchedEdge, ...]
     saved_additive_value: float | None
     saved_bottleneck_value: float | None
+    saved_length_weighted_additive_value: float | None
 
     @property
     def label(self) -> str:
@@ -151,6 +153,7 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
             "top_k": outcome.top_k,
             "mode": outcome.candidate_mode.value,
             "subdivision_points": outcome.subdivision_points,
+            "adaptive_max_points_per_source": outcome.adaptive_max_points_per_source,
             "adaptive_min_separation": outcome.adaptive_min_separation,
         },
         "candidate_statistics": {
@@ -212,7 +215,11 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
             "witness_dijkstra_runs": result.timing.witness_dijkstra_runs,
             "feasibility_reused": result.timing.feasibility_reused,
         },
-        "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck)},
+        "solutions": {
+            Objective.ADDITIVE.value: _solution_payload(result.additive),
+            Objective.BOTTLENECK.value: _solution_payload(result.bottleneck),
+            Objective.LENGTH_WEIGHTED_ADDITIVE.value: _solution_payload(result.length_weighted_additive),
+        },
     }
 
 
@@ -229,10 +236,10 @@ class MainWindow(QMainWindow):
         self._preview_request_id = 0
         self._graph_catalog: dict[Path, GraphInfo] = {}
         self._rebuilding_targets = False
-        self._outcomes: dict[tuple[str, str, float, int, str, int, float, str, str], RunOutcome] = {}
+        self._outcomes: dict[tuple[str, str, float, int, str, int, int, float, str, str], RunOutcome] = {}
         self._current_outcome: RunOutcome | None = None
         self._imported_mapping: ImportedMapping | None = None
-        self._mapping_scores: dict[tuple[str, str, float, int, str, int, float, str, str, tuple[tuple[int, int], ...]], MappingScoreOutcome] = {}
+        self._mapping_scores: dict[tuple[str, str, float, int, str, int, int, float, str, str, tuple[tuple[int, int], ...]], MappingScoreOutcome] = {}
         self._active_token: CancellationToken | None = None
         # Keep the QRunnable alive until its queued finished signal reaches the UI thread.
         self._active_worker: PreflightWorker | MatchWorker | MappingScoreWorker | None = None
@@ -254,7 +261,7 @@ class MainWindow(QMainWindow):
         self.aggregation_combo = QComboBox()
         self.aggregation_combo.addItem("Sum", Objective.ADDITIVE.value)
         self.aggregation_combo.addItem("Max", Objective.BOTTLENECK.value)
-        # self.aggregation_combo.addItem("Length-weighted sum", Objective.LENGTH_WEIGHTED_ADDITIVE.value)
+        self.aggregation_combo.addItem("Length-weighted sum", Objective.LENGTH_WEIGHTED_ADDITIVE.value)
 
         self.mapping_mode_combo = QComboBox()
         self.mapping_mode_combo.addItem("Computed optimum", "computed")
@@ -278,6 +285,10 @@ class MainWindow(QMainWindow):
         self.subdivision_points = QSpinBox()
         self.subdivision_points.setRange(0, 100)
         self.subdivision_points.setValue(int(self.settings.value("subdivision_points", 2)))
+
+        self.adaptive_max_points_per_source = QSpinBox()
+        self.adaptive_max_points_per_source.setRange(1, 100_000)
+        self.adaptive_max_points_per_source.setValue(int(self.settings.value("adaptive_max_points_per_source", 8)))
 
         self.adaptive_min_separation = QDoubleSpinBox()
         self.adaptive_min_separation.setLocale(QLocale.c())
@@ -323,7 +334,7 @@ class MainWindow(QMainWindow):
         return CandidateMode(str(self.candidate_mode_combo.currentData() or CandidateMode.TARGET_JUNCTIONS.value))
 
     @staticmethod
-    def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, int, float, str, str]:
+    def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, int, int, float, str, str]:
         options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
         return (
             str(outcome.source_path.resolve()),
@@ -332,12 +343,13 @@ class MainWindow(QMainWindow):
             int(outcome.top_k),
             outcome.candidate_mode.value,
             int(outcome.subdivision_points),
+            int(outcome.adaptive_max_points_per_source),
             float(outcome.adaptive_min_separation),
             outcome.cost_name,
             options,
         )
 
-    def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, int, float, str, str] | None:
+    def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, int, int, float, str, str] | None:
         paths = self._selected_paths()
 
         if paths is None:
@@ -351,6 +363,7 @@ class MainWindow(QMainWindow):
             int(self.top_k.value()),
             self.current_candidate_mode.value,
             int(self.subdivision_points.value()),
+            int(self.adaptive_max_points_per_source.value()),
             float(self.adaptive_min_separation.value()),
             cost_name,
             options,
@@ -362,7 +375,7 @@ class MainWindow(QMainWindow):
 
     def _mapping_score_key(
         self, mapping: Mapping[int, int], cost_name: str | None = None,
-    ) -> tuple[str, str, float, int, str, int, float, str, str, tuple[tuple[int, int], ...]] | None:
+    ) -> tuple[str, str, float, int, str, int, int, float, str, str, tuple[tuple[int, int], ...]] | None:
         paths = self._selected_paths()
 
         if paths is None:
@@ -377,6 +390,7 @@ class MainWindow(QMainWindow):
             int(self.top_k.value()),
             self.current_candidate_mode.value,
             int(self.subdivision_points.value()),
+            int(self.adaptive_max_points_per_source.value()),
             float(self.adaptive_min_separation.value()),
             resolved_cost,
             options,
@@ -427,11 +441,13 @@ class MainWindow(QMainWindow):
         parameters.addWidget(self.subdivision_points, 3, 1)
         parameters.addWidget(QLabel("Adaptive minimum separation"), 3, 2)
         parameters.addWidget(self.adaptive_min_separation, 3, 3)
-        parameters.addWidget(self.cost_options, 4, 0, 1, 4)
-        parameters.addWidget(QLabel("Displayed mapping"), 5, 0)
-        parameters.addWidget(self.mapping_mode_combo, 5, 1)
-        parameters.addWidget(QLabel("Current score"), 5, 2)
-        parameters.addWidget(self.score_label, 5, 3)
+        parameters.addWidget(QLabel("Adaptive maximum points per source"), 4, 0)
+        parameters.addWidget(self.adaptive_max_points_per_source, 4, 1)
+        parameters.addWidget(self.cost_options, 5, 0, 1, 4)
+        parameters.addWidget(QLabel("Displayed mapping"), 6, 0)
+        parameters.addWidget(self.mapping_mode_combo, 6, 1)
+        parameters.addWidget(QLabel("Current score"), 6, 2)
+        parameters.addWidget(self.score_label, 6, 3)
 
         controls = QHBoxLayout()
         controls.addWidget(files_group, 2)
@@ -476,6 +492,7 @@ class MainWindow(QMainWindow):
         self.candidate_rho.valueChanged.connect(self._candidate_parameters_changed)
         self.top_k.valueChanged.connect(self._candidate_parameters_changed)
         self.subdivision_points.valueChanged.connect(self._candidate_parameters_changed)
+        self.adaptive_max_points_per_source.valueChanged.connect(self._candidate_parameters_changed)
         self.adaptive_min_separation.valueChanged.connect(self._candidate_parameters_changed)
         self.mapping_mode_combo.currentIndexChanged.connect(self._mapping_mode_changed)
         self.cost_options.optionsChanged.connect(self._cost_options_changed)
@@ -606,12 +623,14 @@ class MainWindow(QMainWindow):
         self._update_candidate_controls()
         self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
         self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
         self._pair_changed()
 
     def _update_candidate_controls(self) -> None:
         mode = self.current_candidate_mode
         self.subdivision_points.setEnabled(not self._busy and mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION)
+        self.adaptive_max_points_per_source.setEnabled(not self._busy and mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
         self.adaptive_min_separation.setEnabled(not self._busy and mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
 
     def _rebuild_target_choices(self, preferred_path: Path | None = None) -> None:
@@ -842,6 +861,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("top_k", self.top_k.value())
         self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
         self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
 
         worker = PreflightWorker(
@@ -853,6 +873,7 @@ class MainWindow(QMainWindow):
             top_k=self.top_k.value(),
             candidate_mode=self.current_candidate_mode,
             subdivision_points=self.subdivision_points.value(),
+            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
             adaptive_min_separation=self.adaptive_min_separation.value(),
             cancellation_token=token,
         )
@@ -930,6 +951,7 @@ class MainWindow(QMainWindow):
             top_k=self.top_k.value(),
             candidate_mode=self.current_candidate_mode,
             subdivision_points=self.subdivision_points.value(),
+            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
             adaptive_min_separation=self.adaptive_min_separation.value(),
             costs=costs,
             cancellation_token=self._active_token,
@@ -1013,17 +1035,23 @@ class MainWindow(QMainWindow):
         self.top_k.setEnabled(not busy)
         self.candidate_mode_combo.setEnabled(not busy)
         self.subdivision_points.setEnabled(not busy and self.current_candidate_mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION)
+        self.adaptive_max_points_per_source.setEnabled(not busy and self.current_candidate_mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
         self.adaptive_min_separation.setEnabled(not busy and self.current_candidate_mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
         self.import_button.setEnabled(not busy)
         self.score_mapping_button.setEnabled(not busy and self._display_mode == "imported" and self._imported_pair_is_current())
         self.progress.setRange(0, 0 if busy else 1)
         self.progress.setValue(0 if busy else 1)
 
-    def _selected_solution(self, result: BothMatchResult) -> MatchSolution | None:
-        return result.bottleneck if str(self.aggregation_combo.currentData()) == Objective.BOTTLENECK.value else result.additive
+    def _selected_solution(self, result: AggregationMatchResult) -> MatchSolution | None:
+        selected = Objective(str(self.aggregation_combo.currentData()))
+        if selected is Objective.BOTTLENECK:
+            return result.bottleneck
+        if selected is Objective.LENGTH_WEIGHTED_ADDITIVE:
+            return result.length_weighted_additive
+        return result.additive
 
     @staticmethod
-    def _format_timing(result: BothMatchResult) -> str:
+    def _format_timing(result: AggregationMatchResult) -> str:
         timing = result.timing
 
         if timing is None:
@@ -1124,7 +1152,12 @@ class MainWindow(QMainWindow):
         if outcome is not None:
             evaluation = outcome.evaluation
             self.target_view.set_witnesses(evaluation.edges)
-            value = evaluation.bottleneck_value if objective == Objective.BOTTLENECK.value else evaluation.additive_value
+            if objective == Objective.BOTTLENECK.value:
+                value = evaluation.bottleneck_value
+            elif objective == Objective.LENGTH_WEIGHTED_ADDITIVE.value:
+                value = evaluation.length_weighted_additive_value
+            else:
+                value = evaluation.additive_value
             value_text = "infeasible" if not math.isfinite(value) else f"{value:.12g}"
             self.score_label.setText(f"Imported φ {objective}: {value_text}")
             invalid = "none" if not evaluation.invalid_edge_ids else ", ".join(f"e{edge}" for edge in evaluation.invalid_edge_ids[:20])
@@ -1151,6 +1184,7 @@ class MainWindow(QMainWindow):
                 f"scored with: {outcome.cost_name}\n"
                 f"additive score: {evaluation.additive_value:.12g}\n"
                 f"bottleneck score: {evaluation.bottleneck_value:.12g}\n"
+                f"length-weighted additive score: {evaluation.length_weighted_additive_value:.12g}\n"
                 f"valid witness for every source edge: {'yes' if evaluation.feasible else 'no'}\n"
                 f"invalid edges: {invalid}\n"
                 f"candidate-domain check: {candidate_note}"
@@ -1158,7 +1192,12 @@ class MainWindow(QMainWindow):
             )
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
             self.target_view.set_witnesses(imported.saved_edges)
-            value = imported.saved_bottleneck_value if objective == Objective.BOTTLENECK.value else imported.saved_additive_value
+            if objective == Objective.BOTTLENECK.value:
+                value = imported.saved_bottleneck_value
+            elif objective == Objective.LENGTH_WEIGHTED_ADDITIVE.value:
+                value = imported.saved_length_weighted_additive_value
+            else:
+                value = imported.saved_additive_value
             value_text = "—" if value is None else f"{value:.12g}"
             self.score_label.setText(f"Imported φ {objective}: {value_text}")
             self.details.setPlainText(
@@ -1170,6 +1209,8 @@ class MainWindow(QMainWindow):
                 f"{imported.saved_additive_value if imported.saved_additive_value is not None else 'unknown'}\n"
                 f"bottleneck score from saved local costs: "
                 f"{imported.saved_bottleneck_value if imported.saved_bottleneck_value is not None else 'unknown'}\n"
+                f"length-weighted additive score from saved local costs: "
+                f"{imported.saved_length_weighted_additive_value if imported.saved_length_weighted_additive_value is not None else 'unknown'}\n"
                 "The displayed witnesses are the witnesses stored in the JSON. "
                 "Click 'Score imported φ' to recompute them under the selected cost and options.",
             )
@@ -1393,7 +1434,7 @@ class MainWindow(QMainWindow):
 
             if isinstance(solutions, Mapping):
                 available: list[tuple[str, Mapping[str, object]]] = []
-                for objective in (Objective.ADDITIVE.value, Objective.BOTTLENECK.value):
+                for objective in (Objective.ADDITIVE.value, Objective.BOTTLENECK.value, Objective.LENGTH_WEIGHTED_ADDITIVE.value):
                     raw_solution = solutions.get(objective)
                     if isinstance(raw_solution, Mapping) and bool(raw_solution.get("feasible", False)):
                         available.append((objective, raw_solution))
@@ -1432,6 +1473,7 @@ class MainWindow(QMainWindow):
             saved_top_k = int(candidate_config.get("top_k", 25))
             saved_mode = CandidateMode(str(candidate_config.get("mode", CandidateMode.TARGET_JUNCTIONS.value)))
             saved_subdivision_points = int(candidate_config.get("subdivision_points", 2))
+            saved_adaptive_max_points_per_source = int(candidate_config.get("adaptive_max_points_per_source", 8))
             saved_adaptive_min_separation = float(candidate_config.get("adaptive_min_separation", 1.0))
             normalized_source, loaded_target, swapped = load_matching_pair(self.repository, source_path, target_path, saved_mode)
             matching_target = prepare_candidate_target(
@@ -1440,6 +1482,7 @@ class MainWindow(QMainWindow):
                 candidate_mode=saved_mode,
                 rho=saved_rho,
                 subdivision_points=saved_subdivision_points,
+                adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
                 adaptive_min_separation=saved_adaptive_min_separation,
             )
 
@@ -1473,6 +1516,11 @@ class MainWindow(QMainWindow):
             complete_saved_edges = len(saved_edges) == len(normalized_source.graph.edges)
             saved_additive = sum(edge.cost for edge in saved_edges) if complete_saved_edges else None
             saved_bottleneck = max((edge.cost for edge in saved_edges), default=0.0) if complete_saved_edges else None
+            saved_length_weighted_additive = (
+                sum(normalized_source.graph.edge_by_id[edge.edge_id].length * edge.cost for edge in saved_edges)
+                if complete_saved_edges
+                else None
+            )
             imported = ImportedMapping(
                 json_path=json_path,
                 source_path=source_path,
@@ -1481,6 +1529,7 @@ class MainWindow(QMainWindow):
                 target_graph=matching_target,
                 candidate_mode=saved_mode,
                 subdivision_points=saved_subdivision_points,
+                adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
                 adaptive_min_separation=saved_adaptive_min_separation,
                 mapping=mapping,
                 saved_cost_name=saved_cost_name,
@@ -1490,6 +1539,7 @@ class MainWindow(QMainWindow):
                 saved_edges=saved_edges,
                 saved_additive_value=saved_additive,
                 saved_bottleneck_value=saved_bottleneck,
+                saved_length_weighted_additive_value=saved_length_weighted_additive,
             )
             self._imported_mapping = imported
 
@@ -1497,6 +1547,7 @@ class MainWindow(QMainWindow):
             self.top_k.setValue(saved_top_k)
             self._select_data(self.candidate_mode_combo, saved_mode.value)
             self.subdivision_points.setValue(saved_subdivision_points)
+            self.adaptive_max_points_per_source.setValue(saved_adaptive_max_points_per_source)
             self.adaptive_min_separation.setValue(saved_adaptive_min_separation)
 
             self._populate_source_choices(preferred_path=source_path)
@@ -1540,6 +1591,7 @@ class MainWindow(QMainWindow):
             top_k=self.top_k.value(),
             candidate_mode=self.current_candidate_mode,
             subdivision_points=self.subdivision_points.value(),
+            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
             adaptive_min_separation=self.adaptive_min_separation.value(),
             mapping=imported.mapping,
             cost_name=self.current_cost_name,
@@ -1566,6 +1618,7 @@ class MainWindow(QMainWindow):
             int(self.top_k.value()),
             raw_outcome.candidate_mode.value,
             int(raw_outcome.subdivision_points),
+            int(raw_outcome.adaptive_max_points_per_source),
             float(raw_outcome.adaptive_min_separation),
             raw_outcome.cost_name,
             options,
@@ -1602,6 +1655,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("top_k", self.top_k.value())
         self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
         self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
         self.settings.setValue("cost", self.current_cost_name)
         self.settings.setValue("aggregation", str(self.aggregation_combo.currentData()))

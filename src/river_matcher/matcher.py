@@ -17,7 +17,7 @@ from river_matcher.compatibility import CompatibilityStatistics, TargetConnectiv
 from river_matcher.costs.base import BaseEdgeCost, CostName
 from river_matcher.costs.factory import CostFactory
 from river_matcher.decomposition import SourceDecomposition, build_source_decomposition, validate_source_decomposition
-from river_matcher.dynamic_programming import DPStatistics, DPSolution, Objective, solve_tree_dp, solve_tree_dp_both, solve_tree_feasibility
+from river_matcher.dynamic_programming import DPStatistics, DPSolution, Objective, solve_tree_dp, solve_tree_dp_all, solve_tree_dp_both, solve_tree_feasibility
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight, estimate_matching
 
@@ -90,6 +90,7 @@ class MappingEvaluation:
     edges: tuple[MatchedEdge, ...]
     additive_value: float
     bottleneck_value: float
+    length_weighted_additive_value: float
     invalid_edge_ids: tuple[int, ...]
     candidate_violations: tuple[int, ...]
     effective_candidate_violations: tuple[int, ...]
@@ -145,6 +146,25 @@ class BothMatchResult:
     @property
     def bottleneck_feasible(self) -> bool:
         return self.bottleneck is not None
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationMatchResult:
+    cost_name: CostName
+    candidate_sets: NormalizedCandidateSets
+    candidate_statistics: CandidateStatistics
+    decomposition: SourceDecomposition
+    additive: MatchSolution | None
+    bottleneck: MatchSolution | None
+    length_weighted_additive: MatchSolution | None
+    dp_statistics: DPStatistics
+    effective_candidate_sets: NormalizedCandidateSets | None = None
+    effective_candidate_statistics: CandidateStatistics | None = None
+    preflight: MatchingPreflight | None = None
+    effective_preflight: MatchingPreflight | None = None
+    compatibility_statistics: CompatibilityStatistics | None = None
+    feasibility_statistics: DPStatistics | None = None
+    timing: MatchTiming | None = None
 
 
 def _normalize_candidate_sets(source: JunctionGraph, target: JunctionGraph, candidate_sets: RawCandidateSets) -> dict[int, tuple[int, ...]]:
@@ -544,6 +564,9 @@ class RiverGraphMatcher:
             feasible = not invalid_edge_ids
             additive_value = sum(edge.cost for edge in edges) if feasible else math.inf
             bottleneck_value = max((edge.cost for edge in edges), default=0.0) if feasible else math.inf
+            length_weighted_additive_value = (
+                sum(self.source.edge_by_id[edge.edge_id].length * edge.cost for edge in edges) if feasible else math.inf
+            )
             candidate_violations = tuple(
                 source_vertex
                 for source_vertex, target_vertex in normalized.items()
@@ -571,6 +594,7 @@ class RiverGraphMatcher:
                 edges=edges,
                 additive_value=additive_value,
                 bottleneck_value=bottleneck_value,
+                length_weighted_additive_value=length_weighted_additive_value,
                 invalid_edge_ids=tuple(invalid_edge_ids),
                 candidate_violations=candidate_violations,
                 effective_candidate_violations=effective_candidate_violations,
@@ -732,6 +756,90 @@ class RiverGraphMatcher:
             cost_name=edge_cost.name,
             additive=additive,
             bottleneck=bottleneck,
+            dp_statistics=result.statistics,
+            timing=timing,
+            **metadata,
+        )
+
+    def match_all(
+        self,
+        cost_name: CostName | str,
+        *,
+        cancellation_token: CancellationToken | None = None,
+        progress: ProgressCallback | None = None,
+        **cost_options: object,
+    ) -> AggregationMatchResult:
+        resolved_name = CostName(cost_name)
+        feasibility_reused = self._feasible is not None
+        arc_before = self._arc_consistency_seconds
+        feasibility_before = self._feasibility_dp_seconds
+        feasible = self.prepare_feasibility(cancellation_token=cancellation_token, progress=progress)
+        timing = self._feasibility_timing(arc_before, feasibility_before, feasibility_reused)
+        metadata = self._common_metadata()
+
+        if not feasible:
+            return AggregationMatchResult(
+                cost_name=resolved_name,
+                additive=None,
+                bottleneck=None,
+                length_weighted_additive=None,
+                dp_statistics=self._feasibility_statistics or _empty_statistics(),
+                timing=timing,
+                **metadata,
+            )
+
+        if progress is not None:
+            progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
+
+        started = time.perf_counter()
+        edge_cost = self._cost(resolved_name, cost_options)
+        cost_setup_seconds = time.perf_counter() - started
+        cost_before = edge_cost.timing
+        cost_seconds_before = cost_before.uncached_seconds
+        cost_calls_before = cost_before.uncached_calls
+        cost_hits_before = cost_before.cache_hits
+        witness_before = self.cost_factory.resources.guided_timing()
+        started = time.perf_counter()
+        result = solve_tree_dp_all(
+            self.decomposition,
+            self.effective_candidate_sets,
+            edge_cost,
+            edge_weights=_edge_weights(self.source),
+            compatibility=self._compatibility,
+            cancellation_token=cancellation_token,
+        )
+        cost_dp_seconds = time.perf_counter() - started
+        started = time.perf_counter()
+        additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token)
+        bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token)
+        length_weighted_additive = _materialize_solution(
+            self.source,
+            edge_cost,
+            result.length_weighted_additive,
+            cancellation_token=cancellation_token,
+        )
+        materialization_seconds = time.perf_counter() - started
+        witness_after = self.cost_factory.resources.guided_timing()
+        timing = MatchTiming(
+            arc_consistency_seconds=timing.arc_consistency_seconds,
+            feasibility_dp_seconds=timing.feasibility_dp_seconds,
+            cost_setup_seconds=cost_setup_seconds,
+            cost_dp_seconds=cost_dp_seconds,
+            materialization_seconds=materialization_seconds,
+            uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before,
+            local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs,
+            feasibility_reused=timing.feasibility_reused,
+        )
+        return AggregationMatchResult(
+            cost_name=edge_cost.name,
+            additive=additive,
+            bottleneck=bottleneck,
+            length_weighted_additive=length_weighted_additive,
             dp_statistics=result.statistics,
             timing=timing,
             **metadata,
