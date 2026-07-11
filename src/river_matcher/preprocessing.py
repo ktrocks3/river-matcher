@@ -123,6 +123,22 @@ def _connected_components(adjacency: Adjacency) -> list[set[int]]:
     return components
 
 
+def keep_largest_raw_component(vertices: RawVertices, edges: RawEdges) -> tuple[RawVertices, RawEdges]:
+    """Retain one deterministic largest component of a filtered raw graph."""
+    if not vertices:
+        return {}, []
+    components = _connected_components(_build_adjacency(vertices, edges))
+
+    def component_key(component: set[int]) -> tuple[int, int, int]:
+        edge_count = sum(int(edge["u"]) in component and int(edge["v"]) in component for edge in edges)
+        return len(component), edge_count, -min(component)
+
+    largest = max(components, key=component_key)
+    retained_vertices = {vertex: vertices[vertex] for vertex in sorted(largest)}
+    retained_edges = [edge for edge in edges if int(edge["u"]) in largest and int(edge["v"]) in largest]
+    return retained_vertices, retained_edges
+
+
 def _junction_vertices(adjacency: Adjacency) -> set[int]:
     """Select vertices retained after degree-2 suppression. A component consisting entirely of degree-2 vertices is a cycle. Two deterministic anchor vertices are retained
     so the cycle becomes two parallel junction edges rather than disappearing."""
@@ -273,3 +289,19 @@ def load_junction_graph(path: str | Path, *, name: str | None = None, keep_large
     path = Path(path)
     vertices, edges = read_topotide_graph(path)
     return preprocess_raw_graph(name=name or path.stem, vertices=vertices, edges=edges, keep_largest_component=keep_largest_component)
+
+
+def load_embedded_graph(path: str | Path, *, name: str | None = None, keep_largest_component: bool = True) -> JunctionGraph:
+    """Load a graph without suppressing its original degree-two vertices."""
+    path = Path(path)
+    vertices, edges = read_topotide_graph(path)
+    filtered_vertices, filtered_edges = filter_raw_graph(vertices, edges)
+    if keep_largest_component:
+        filtered_vertices, filtered_edges = keep_largest_raw_component(filtered_vertices, filtered_edges)
+    if not filtered_vertices:
+        raise ValueError(f"Graph {name or path.stem!r} contains no valid vertices after filtering.")
+    ordered_edges = sorted(filtered_edges, key=lambda edge: (int(edge["id"]), int(edge["u"]), int(edge["v"])))
+    embedded_edges = tuple(
+        JunctionEdge(id=edge_id, u=int(edge["u"]), v=int(edge["v"]), polyline=np.asarray(edge["path"], dtype=np.float64)) for edge_id, edge in enumerate(ordered_edges)
+    )
+    return JunctionGraph(name=name or f"{path.stem}_original", coordinates=filtered_vertices, edges=embedded_edges)

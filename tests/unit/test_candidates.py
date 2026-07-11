@@ -5,8 +5,50 @@ import math
 import numpy as np
 import pytest
 
-from river_matcher.candidates import compute_candidate_sets, compute_candidate_sets_reference
+from river_matcher.candidates import (
+    CandidateMode,
+    compute_candidate_sets,
+    compute_candidate_sets_reference,
+    point_at_fraction,
+    subdivide_graph_adaptive_closest_points,
+    subdivide_graph_uniform,
+    subpolyline_between_fractions,
+)
 from river_matcher.models import JunctionEdge, JunctionGraph
+
+
+def test_candidate_mode_display_names_are_explicit() -> None:
+    assert [mode.display_name for mode in CandidateMode] == ["Target junctions", "Original target vertices", "Uniform target-edge subdivision", "Adaptive closest points"]
+
+
+def test_polyline_fraction_helpers_use_arc_length_and_preserve_bends() -> None:
+    polyline = np.asarray([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)])
+
+    np.testing.assert_allclose(point_at_fraction(polyline, 0.75), (2.0, 1.0))
+    np.testing.assert_allclose(subpolyline_between_fractions(polyline, 0.25, 0.75), ((1.0, 0.0), (2.0, 0.0), (2.0, 1.0)))
+
+
+def test_uniform_subdivision_preserves_vertices_curvature_and_total_length() -> None:
+    graph = JunctionGraph("target", {4: (0.0, 0.0), 9: (2.0, 2.0)}, (JunctionEdge(7, 4, 9, np.asarray([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0)])),))
+
+    subdivided = subdivide_graph_uniform(graph, samples_per_edge=2)
+
+    assert subdivided.vertices == (4, 9, 10, 11)
+    assert [(edge.id, edge.u, edge.v) for edge in subdivided.edges] == [(0, 4, 10), (1, 10, 11), (2, 11, 9)]
+    assert sum(edge.length for edge in subdivided.edges) == pytest.approx(graph.edges[0].length)
+    assert any(np.allclose(point, (2.0, 0.0)) for edge in subdivided.edges for point in edge.polyline)
+
+
+def test_adaptive_subdivision_inserts_deduplicated_closest_points() -> None:
+    source = JunctionGraph("source", {1: (3.0, 2.0), 2: (3.0, 2.0)}, (JunctionEdge(0, 1, 2, np.asarray([(3.0, 2.0), (3.1, 2.0)])),))
+    target = JunctionGraph("target", {10: (0.0, 0.0), 20: (10.0, 0.0)}, (JunctionEdge(5, 10, 20, np.asarray([(0.0, 0.0), (10.0, 0.0)])),))
+
+    subdivided = subdivide_graph_adaptive_closest_points(source, target, rho=2.0, min_separation=0.0)
+
+    assert subdivided.vertices == (10, 20, 21)
+    assert subdivided.coordinates[21] == pytest.approx((3.0, 0.0))
+    assert [(edge.u, edge.v) for edge in subdivided.edges] == [(10, 21), (21, 20)]
+    assert 21 in compute_candidate_sets(source, subdivided, rho=2.0, top_k=10)[1]
 
 
 def make_edge(edge_id: int, u: int, v: int, points: list[tuple[float, float]]) -> JunctionEdge:

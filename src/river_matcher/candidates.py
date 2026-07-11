@@ -1,19 +1,193 @@
 from __future__ import annotations
 
 import math
+from collections import defaultdict
+from enum import StrEnum
 from typing import Any, cast
 
 import numpy as np
 from numba import njit, prange
 from numpy.typing import NDArray
 
-from river_matcher.models import JunctionGraph
+from river_matcher.models import JunctionEdge, JunctionGraph
 
 type FloatArray = NDArray[np.float64]
 type IntArray = NDArray[np.int64]
 type CandidateSets = dict[int, list[int]]
 type PreparedTargetEdges = tuple[IntArray, FloatArray, FloatArray, FloatArray, FloatArray, IntArray]
 _SEGMENT_SQUARED_TOLERANCE = 1e-24
+
+
+class CandidateMode(StrEnum):
+    TARGET_JUNCTIONS = "target_junctions"
+    ORIGINAL_TARGET_VERTICES = "original_target_vertices"
+    UNIFORM_TARGET_SUBDIVISION = "uniform_target_subdivision"
+    ADAPTIVE_CLOSEST_POINTS = "adaptive_closest_points"
+
+    @property
+    def display_name(self) -> str:
+        return {
+            CandidateMode.TARGET_JUNCTIONS: "Target junctions",
+            CandidateMode.ORIGINAL_TARGET_VERTICES: "Original target vertices",
+            CandidateMode.UNIFORM_TARGET_SUBDIVISION: "Uniform target-edge subdivision",
+            CandidateMode.ADAPTIVE_CLOSEST_POINTS: "Adaptive closest points",
+        }[self]
+
+
+def _polyline_lengths(polyline: FloatArray) -> tuple[FloatArray, FloatArray, float]:
+    segment_lengths = _float64_array(np.linalg.norm(np.diff(polyline, axis=0), axis=1))
+    cumulative = _float64_array(np.concatenate((np.asarray([0.0]), np.cumsum(segment_lengths))))
+    return segment_lengths, cumulative, float(cumulative[-1])
+
+
+def point_at_fraction(polyline: FloatArray, fraction: float) -> FloatArray:
+    """Return the arc-length position at ``fraction`` along a polyline."""
+    points = _contiguous_float64(polyline)
+    value = float(fraction)
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(f"Polyline fraction must be finite and in [0, 1], got {fraction!r}")
+    segment_lengths, cumulative, total = _polyline_lengths(points)
+    distance = value * total
+    if distance <= 0.0:
+        return points[0].copy()
+    if distance >= total:
+        return points[-1].copy()
+    segment = min(int(np.searchsorted(cumulative, distance, side="right")) - 1, len(segment_lengths) - 1)
+    local = (distance - float(cumulative[segment])) / float(segment_lengths[segment])
+    return _float64_array(points[segment] + local * (points[segment + 1] - points[segment]))
+
+
+def subpolyline_between_fractions(polyline: FloatArray, start_fraction: float, end_fraction: float) -> FloatArray:
+    """Slice a polyline by arc-length fractions while retaining interior bends."""
+    points = _contiguous_float64(polyline)
+    start = float(start_fraction)
+    end = float(end_fraction)
+    if not math.isfinite(start) or not math.isfinite(end) or not 0.0 <= start < end <= 1.0:
+        raise ValueError(f"Polyline interval must satisfy 0 <= start < end <= 1, got ({start_fraction!r}, {end_fraction!r})")
+    _, cumulative, total = _polyline_lengths(points)
+    start_distance = start * total
+    end_distance = end * total
+    selected = [point_at_fraction(points, start)]
+    selected.extend(points[index].copy() for index in range(1, len(points) - 1) if start_distance < float(cumulative[index]) < end_distance)
+    selected.append(point_at_fraction(points, end))
+    return _contiguous_float64(np.vstack(selected))
+
+
+def _subdivide_graph(graph: JunctionGraph, fractions_by_edge: dict[int, list[float]], *, name: str) -> JunctionGraph:
+    coordinates = dict(graph.coordinates)
+    next_vertex_id = max(graph.vertices) + 1
+    next_edge_id = 0
+    split_edges: list[JunctionEdge] = []
+
+    for edge in graph.edges:
+        fractions = [0.0, *fractions_by_edge.get(edge.id, []), 1.0]
+        vertices = [edge.u]
+        for fraction in fractions[1:-1]:
+            point = point_at_fraction(edge.polyline, fraction)
+            coordinates[next_vertex_id] = (float(point[0]), float(point[1]))
+            vertices.append(next_vertex_id)
+            next_vertex_id += 1
+        vertices.append(edge.v)
+
+        for index, (start, end) in enumerate(zip(fractions, fractions[1:], strict=False)):
+            split_edges.append(JunctionEdge(id=next_edge_id, u=vertices[index], v=vertices[index + 1], polyline=subpolyline_between_fractions(edge.polyline, start, end)))
+            next_edge_id += 1
+    return JunctionGraph(name=name, coordinates=coordinates, edges=tuple(split_edges))
+
+
+def subdivide_graph_uniform(graph: JunctionGraph, *, samples_per_edge: int = 2) -> JunctionGraph:
+    """Insert an equal number of arc-length-spaced vertices into every target edge."""
+    samples = int(samples_per_edge)
+    if samples < 0:
+        raise ValueError(f"Subdivision points per edge must be nonnegative, got {samples_per_edge!r}")
+    if samples == 0 or not graph.edges:
+        return graph
+    fractions = [index / (samples + 1) for index in range(1, samples + 1)]
+    return _subdivide_graph(graph, {edge.id: fractions for edge in graph.edges}, name=f"{graph.name}_uniform_{samples}")
+
+
+def _closest_polyline_fraction(point: tuple[float, float], polyline: FloatArray) -> tuple[float, float]:
+    points = _contiguous_float64(polyline)
+    segment_lengths, cumulative, total = _polyline_lengths(points)
+    query = _float64_array(point)
+    best_squared = math.inf
+    best_distance = 0.0
+    for index, segment_length in enumerate(segment_lengths):
+        vector = points[index + 1] - points[index]
+        squared_length = float(segment_length * segment_length)
+        projection = float(np.dot(query - points[index], vector) / squared_length)
+        projection = min(max(projection, 0.0), 1.0)
+        closest = points[index] + projection * vector
+        squared_distance = float(np.dot(query - closest, query - closest))
+        distance_along = float(cumulative[index]) + projection * float(segment_length)
+        if squared_distance < best_squared or (squared_distance == best_squared and distance_along < best_distance):
+            best_squared = squared_distance
+            best_distance = distance_along
+    return math.sqrt(best_squared), best_distance / total
+
+
+def subdivide_graph_adaptive_closest_points(
+    source: JunctionGraph, target: JunctionGraph, *, rho: float, max_points_per_source: int = 8, min_separation: float = 1.0,
+) -> JunctionGraph:
+    """Split target edges at nearby closest points for each source vertex."""
+    radius = float(rho)
+    limit = int(max_points_per_source)
+    separation = float(min_separation)
+    if not math.isfinite(radius) or radius < 0.0:
+        raise ValueError(f"Candidate radius must be finite and nonnegative, got {rho!r}")
+    if limit < 1:
+        raise ValueError(f"Maximum adaptive points per source must be at least 1, got {max_points_per_source!r}")
+    if not math.isfinite(separation) or separation < 0.0:
+        raise ValueError(f"Adaptive minimum separation must be finite and nonnegative, got {min_separation!r}")
+
+    split_distances: dict[int, list[float]] = defaultdict(list)
+    for source_vertex in sorted(source.vertices):
+        point = source.coordinates[source_vertex]
+        nearby: list[tuple[float, int, float]] = []
+        for edge in target.edges:
+            minimum = np.min(edge.polyline, axis=0)
+            maximum = np.max(edge.polyline, axis=0)
+            bbox = _float64_array((minimum[0], minimum[1], maximum[0], maximum[1]))
+            if _bbox_point_lower_bound(point, bbox) > radius:
+                continue
+            distance, fraction = _closest_polyline_fraction(point, edge.polyline)
+            if distance <= radius:
+                nearby.append((distance, edge.id, fraction))
+        nearby.sort(key=lambda item: (item[0], item[1], item[2]))
+        for _, edge_id, fraction in nearby[:limit]:
+            edge = target.edge_by_id[edge_id]
+            distance_along = fraction * edge.length
+            if separation > 0.0 and (distance_along < separation or edge.length - distance_along < separation):
+                continue
+            split_distances[edge_id].append(distance_along)
+
+    fractions_by_edge: dict[int, list[float]] = {}
+    for edge in target.edges:
+        accepted: list[float] = []
+        tolerance = max(1e-12, edge.length * 1e-12)
+        for distance in sorted(split_distances.get(edge.id, [])):
+            if distance <= tolerance or edge.length - distance <= tolerance:
+                continue
+            required_gap = max(separation, tolerance)
+            if not accepted or distance - accepted[-1] >= required_gap:
+                accepted.append(distance)
+        if accepted:
+            fractions_by_edge[edge.id] = [distance / edge.length for distance in accepted]
+    if not fractions_by_edge:
+        return target
+    return _subdivide_graph(target, fractions_by_edge, name=f"{target.name}_adaptive")
+
+
+def prepare_candidate_target(
+    source: JunctionGraph, target: JunctionGraph, *, candidate_mode: CandidateMode | str, rho: float, subdivision_points: int = 2, adaptive_min_separation: float = 1.0,
+) -> JunctionGraph:
+    """Build the exact target graph whose vertices form the candidate universe."""
+    mode = CandidateMode(candidate_mode)
+    if mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION:
+        return subdivide_graph_uniform(target, samples_per_edge=subdivision_points)
+    if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS:
+        return subdivide_graph_adaptive_closest_points(source, target, rho=rho, min_separation=adaptive_min_separation)
+    return target
 
 
 def _float64_array(value: Any) -> FloatArray:

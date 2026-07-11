@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from river_matcher.preprocessing import compress_degree_two_chains, filter_raw_graph, load_junction_graph, preprocess_raw_graph
+from river_matcher.preprocessing import compress_degree_two_chains, filter_raw_graph, load_embedded_graph, load_junction_graph, preprocess_raw_graph
 
 
 def raw_edge(edge_id: int, u: int, v: int, path: object, delta: float = 1.0) -> dict:
@@ -261,3 +261,30 @@ def test_load_junction_graph_accepts_name_override(tmp_path: Path) -> None:
     graph = load_junction_graph(path, name="custom-name")
 
     assert graph.name == "custom-name"
+
+
+def test_load_embedded_graph_preserves_degree_two_vertices(tmp_path: Path) -> None:
+    path = tmp_path / "river.txt"
+    path.write_text(
+        "\n".join(
+            [
+                "5",
+                "1 0.0 0.0",
+                "2 1.0 0.0",
+                "3 2.0 0.0",
+                "10 10.0 0.0",
+                "11 11.0 0.0",
+                "3",
+                "10 1 2 1.0 0.0 0.0 1.0 0.0",
+                "11 2 3 1.0 1.0 0.0 2.0 0.0",
+                "12 10 11 1.0 10.0 0.0 11.0 0.0",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+    graph = load_embedded_graph(path)
+
+    assert graph.name == "river_original"
+    assert graph.vertices == (1, 2, 3)
+    assert [(edge.id, edge.u, edge.v) for edge in graph.edges] == [(0, 1, 2), (1, 2, 3)]

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,9 +31,11 @@ from PySide6.QtWidgets import (
 )
 
 from river_matcher.cancellation import CancellationToken
+from river_matcher.candidates import CandidateMode, prepare_candidate_target
 from river_matcher.costs import available_costs
 from river_matcher.dynamic_programming import Objective
-from river_matcher.matcher import BothMatchResult, MappingEvaluation, MatchedEdge, MatchSolution
+from river_matcher.matcher import BothMatchResult, MatchedEdge, MatchSolution
+from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
 from river_matcher.ui.workers import (
@@ -50,7 +52,7 @@ from river_matcher.ui.workers import (
     PreviewOutcome,
     PreviewWorker,
     RunOutcome,
-    normalize_sparse_to_dense,
+    load_matching_pair,
 )
 
 _WARN_STATE_LIMIT = 2_000_000
@@ -62,6 +64,11 @@ class ImportedMapping:
     json_path: Path
     source_path: Path
     target_path: Path
+    source_graph: JunctionGraph
+    target_graph: JunctionGraph
+    candidate_mode: CandidateMode
+    subdivision_points: int
+    adaptive_min_separation: float
     mapping: Mapping[int, int]
     saved_cost_name: str | None
     saved_cost_options: Mapping[str, object]
@@ -139,7 +146,13 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
         "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
         "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
         "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)},
-        "candidate_parameters": {"rho": outcome.candidate_rho, "top_k": outcome.top_k},
+        "candidate_parameters": {
+            "rho": outcome.candidate_rho,
+            "top_k": outcome.top_k,
+            "mode": outcome.candidate_mode.value,
+            "subdivision_points": outcome.subdivision_points,
+            "adaptive_min_separation": outcome.adaptive_min_separation,
+        },
         "candidate_statistics": {
             "source_vertices": candidates.source_vertices,
             "empty_domains": candidates.empty_domains,
@@ -216,10 +229,10 @@ class MainWindow(QMainWindow):
         self._preview_request_id = 0
         self._graph_catalog: dict[Path, GraphInfo] = {}
         self._rebuilding_targets = False
-        self._outcomes: dict[tuple[str, str, float, int, str, str], RunOutcome] = {}
+        self._outcomes: dict[tuple[str, str, float, int, str, int, float, str, str], RunOutcome] = {}
         self._current_outcome: RunOutcome | None = None
         self._imported_mapping: ImportedMapping | None = None
-        self._mapping_scores: dict[tuple[str, str, str, str, tuple[tuple[int, int], ...]], MappingScoreOutcome] = {}
+        self._mapping_scores: dict[tuple[str, str, float, int, str, int, float, str, str, tuple[tuple[int, int], ...]], MappingScoreOutcome] = {}
         self._active_token: CancellationToken | None = None
         # Keep the QRunnable alive until its queued finished signal reaches the UI thread.
         self._active_worker: PreflightWorker | MatchWorker | MappingScoreWorker | None = None
@@ -258,6 +271,20 @@ class MainWindow(QMainWindow):
         self.top_k.setRange(1, 100_000)
         self.top_k.setValue(int(self.settings.value("top_k", 25)))
 
+        self.candidate_mode_combo = QComboBox()
+        for mode in CandidateMode:
+            self.candidate_mode_combo.addItem(mode.display_name, mode.value)
+
+        self.subdivision_points = QSpinBox()
+        self.subdivision_points.setRange(0, 100)
+        self.subdivision_points.setValue(int(self.settings.value("subdivision_points", 2)))
+
+        self.adaptive_min_separation = QDoubleSpinBox()
+        self.adaptive_min_separation.setLocale(QLocale.c())
+        self.adaptive_min_separation.setRange(0.0, 1_000_000.0)
+        self.adaptive_min_separation.setDecimals(3)
+        self.adaptive_min_separation.setValue(float(self.settings.value("adaptive_min_separation", 1.0)))
+
         self.cost_options = CostOptionsWidget()
         self.run_button = QPushButton("Run selected cost")
         self.compute_all_button = QPushButton("Compute all costs")
@@ -291,25 +318,51 @@ class MainWindow(QMainWindow):
     def current_cost_name(self) -> str:
         return str(self.cost_combo.currentData())
 
-    @staticmethod
-    def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, str]:
-        options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (str(outcome.source_path.resolve()), str(outcome.target_path.resolve()), float(outcome.candidate_rho), int(outcome.top_k), outcome.cost_name, options)
+    @property
+    def current_candidate_mode(self) -> CandidateMode:
+        return CandidateMode(str(self.candidate_mode_combo.currentData() or CandidateMode.TARGET_JUNCTIONS.value))
 
-    def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, str] | None:
+    @staticmethod
+    def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, int, float, str, str]:
+        options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        return (
+            str(outcome.source_path.resolve()),
+            str(outcome.target_path.resolve()),
+            float(outcome.candidate_rho),
+            int(outcome.top_k),
+            outcome.candidate_mode.value,
+            int(outcome.subdivision_points),
+            float(outcome.adaptive_min_separation),
+            outcome.cost_name,
+            options,
+        )
+
+    def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, int, float, str, str] | None:
         paths = self._selected_paths()
 
         if paths is None:
             return None
 
         options = json.dumps(self.cost_options.options_for(cost_name), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (str(paths[0].resolve()), str(paths[1].resolve()), float(self.candidate_rho.value()), int(self.top_k.value()), cost_name, options)
+        return (
+            str(paths[0].resolve()),
+            str(paths[1].resolve()),
+            float(self.candidate_rho.value()),
+            int(self.top_k.value()),
+            self.current_candidate_mode.value,
+            int(self.subdivision_points.value()),
+            float(self.adaptive_min_separation.value()),
+            cost_name,
+            options,
+        )
 
     @property
     def _display_mode(self) -> str:
         return str(self.mapping_mode_combo.currentData() or "computed")
 
-    def _mapping_score_key(self, mapping: Mapping[int, int], cost_name: str | None = None) -> tuple[str, str, str, str, tuple[tuple[int, int], ...]] | None:
+    def _mapping_score_key(
+        self, mapping: Mapping[int, int], cost_name: str | None = None,
+    ) -> tuple[str, str, float, int, str, int, float, str, str, tuple[tuple[int, int], ...]] | None:
         paths = self._selected_paths()
 
         if paths is None:
@@ -317,7 +370,18 @@ class MainWindow(QMainWindow):
 
         resolved_cost = self.current_cost_name if cost_name is None else cost_name
         options = json.dumps(self.cost_options.options_for(resolved_cost), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (str(paths[0].resolve()), str(paths[1].resolve()), resolved_cost, options, tuple(sorted((int(source), int(target)) for source, target in mapping.items())))
+        return (
+            str(paths[0].resolve()),
+            str(paths[1].resolve()),
+            float(self.candidate_rho.value()),
+            int(self.top_k.value()),
+            self.current_candidate_mode.value,
+            int(self.subdivision_points.value()),
+            float(self.adaptive_min_separation.value()),
+            resolved_cost,
+            options,
+            tuple(sorted((int(source), int(target)) for source, target in mapping.items())),
+        )
 
     def _imported_pair_is_current(self) -> bool:
         imported = self._imported_mapping
@@ -353,15 +417,21 @@ class MainWindow(QMainWindow):
         parameters.addWidget(self.cost_combo, 0, 1)
         parameters.addWidget(QLabel("Displayed aggregation"), 0, 2)
         parameters.addWidget(self.aggregation_combo, 0, 3)
-        parameters.addWidget(QLabel("Candidate radius ρ"), 1, 0)
-        parameters.addWidget(self.candidate_rho, 1, 1)
-        parameters.addWidget(QLabel("Top-k candidates"), 1, 2)
-        parameters.addWidget(self.top_k, 1, 3)
-        parameters.addWidget(self.cost_options, 2, 0, 1, 4)
-        parameters.addWidget(QLabel("Displayed mapping"), 3, 0)
-        parameters.addWidget(self.mapping_mode_combo, 3, 1)
-        parameters.addWidget(QLabel("Current score"), 3, 2)
-        parameters.addWidget(self.score_label, 3, 3)
+        parameters.addWidget(QLabel("Candidate mode"), 1, 0)
+        parameters.addWidget(self.candidate_mode_combo, 1, 1, 1, 3)
+        parameters.addWidget(QLabel("Candidate radius ρ"), 2, 0)
+        parameters.addWidget(self.candidate_rho, 2, 1)
+        parameters.addWidget(QLabel("Top-k candidates"), 2, 2)
+        parameters.addWidget(self.top_k, 2, 3)
+        parameters.addWidget(QLabel("Subdivision points per target edge"), 3, 0)
+        parameters.addWidget(self.subdivision_points, 3, 1)
+        parameters.addWidget(QLabel("Adaptive minimum separation"), 3, 2)
+        parameters.addWidget(self.adaptive_min_separation, 3, 3)
+        parameters.addWidget(self.cost_options, 4, 0, 1, 4)
+        parameters.addWidget(QLabel("Displayed mapping"), 5, 0)
+        parameters.addWidget(self.mapping_mode_combo, 5, 1)
+        parameters.addWidget(QLabel("Current score"), 5, 2)
+        parameters.addWidget(self.score_label, 5, 3)
 
         controls = QHBoxLayout()
         controls.addWidget(files_group, 2)
@@ -402,6 +472,11 @@ class MainWindow(QMainWindow):
         self.target_combo.currentIndexChanged.connect(self._target_changed)
         self.cost_combo.currentIndexChanged.connect(self._cost_changed)
         self.aggregation_combo.currentIndexChanged.connect(self._objective_changed)
+        self.candidate_mode_combo.currentIndexChanged.connect(self._candidate_parameters_changed)
+        self.candidate_rho.valueChanged.connect(self._candidate_parameters_changed)
+        self.top_k.valueChanged.connect(self._candidate_parameters_changed)
+        self.subdivision_points.valueChanged.connect(self._candidate_parameters_changed)
+        self.adaptive_min_separation.valueChanged.connect(self._candidate_parameters_changed)
         self.mapping_mode_combo.currentIndexChanged.connect(self._mapping_mode_changed)
         self.cost_options.optionsChanged.connect(self._cost_options_changed)
         self.run_button.clicked.connect(self._run_selected)
@@ -499,6 +574,8 @@ class MainWindow(QMainWindow):
 
         self._select_data(self.cost_combo, str(self.settings.value("cost", "relative_length_error")))
         self._select_data(self.aggregation_combo, str(self.settings.value("aggregation", Objective.ADDITIVE.value)))
+        self._select_data(self.candidate_mode_combo, str(self.settings.value("candidate_mode", CandidateMode.TARGET_JUNCTIONS.value)))
+        self._update_candidate_controls()
 
     def _source_changed(self) -> None:
         if self._rebuilding_targets:
@@ -524,6 +601,18 @@ class MainWindow(QMainWindow):
         self.score_mapping_button.setEnabled(not self._busy and self._display_mode == "imported" and self._imported_pair_is_current())
         self.score_label.setText("Score: —")
         self._schedule_preview()
+
+    def _candidate_parameters_changed(self) -> None:
+        self._update_candidate_controls()
+        self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
+        self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
+        self._pair_changed()
+
+    def _update_candidate_controls(self) -> None:
+        mode = self.current_candidate_mode
+        self.subdivision_points.setEnabled(not self._busy and mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION)
+        self.adaptive_min_separation.setEnabled(not self._busy and mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
 
     def _rebuild_target_choices(self, preferred_path: Path | None = None) -> None:
         source_data = self.source_combo.currentData()
@@ -751,8 +840,22 @@ class MainWindow(QMainWindow):
         self._set_busy(True)
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
         self.settings.setValue("top_k", self.top_k.value())
+        self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
+        self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
 
-        worker = PreflightWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(), cancellation_token=token)
+        worker = PreflightWorker(
+            self.repository,
+            self.sessions,
+            paths[0],
+            paths[1],
+            candidate_rho=self.candidate_rho.value(),
+            top_k=self.top_k.value(),
+            candidate_mode=self.current_candidate_mode,
+            subdivision_points=self.subdivision_points.value(),
+            adaptive_min_separation=self.adaptive_min_separation.value(),
+            cancellation_token=token,
+        )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._preflight_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -769,7 +872,7 @@ class MainWindow(QMainWindow):
 
         if preflight.empty_domains:
             QMessageBox.information(
-                self, "No complete candidate mapping", f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost."
+                self, "No complete candidate mapping", f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost.",
             )
             self._finish_job("Preflight stopped: empty candidate domains")
             return
@@ -825,6 +928,9 @@ class MainWindow(QMainWindow):
             paths[1],
             candidate_rho=self.candidate_rho.value(),
             top_k=self.top_k.value(),
+            candidate_mode=self.current_candidate_mode,
+            subdivision_points=self.subdivision_points.value(),
+            adaptive_min_separation=self.adaptive_min_separation.value(),
             costs=costs,
             cancellation_token=self._active_token,
         )
@@ -905,6 +1011,9 @@ class MainWindow(QMainWindow):
         self.cost_options.setEnabled(not busy)
         self.candidate_rho.setEnabled(not busy)
         self.top_k.setEnabled(not busy)
+        self.candidate_mode_combo.setEnabled(not busy)
+        self.subdivision_points.setEnabled(not busy and self.current_candidate_mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION)
+        self.adaptive_min_separation.setEnabled(not busy and self.current_candidate_mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
         self.import_button.setEnabled(not busy)
         self.score_mapping_button.setEnabled(not busy and self._display_mode == "imported" and self._imported_pair_is_current())
         self.progress.setRange(0, 0 if busy else 1)
@@ -952,7 +1061,7 @@ class MainWindow(QMainWindow):
                 f"arc-consistency removed: {pruning} candidates\n"
                 f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
                 f"effective state estimate: {estimate:,}"
-                f"{self._format_timing(result)}"
+                f"{self._format_timing(result)}",
             )
             self.save_button.setEnabled(True)
             return
@@ -972,7 +1081,7 @@ class MainWindow(QMainWindow):
             f"DP: {dp.enumerated_states:,} complete states, {dp.partial_assignments:,} partial assignments, "
             f"{dp.message_entries:,} messages, {dp.unique_cost_requests:,} unique local costs\n"
             f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}"
-            f"{self._format_timing(result)}"
+            f"{self._format_timing(result)}",
         )
         self.save_button.setEnabled(True)
 
@@ -1001,8 +1110,8 @@ class MainWindow(QMainWindow):
             self.score_mapping_button.setEnabled(False)
             return
 
-        source = self.repository.load(imported.source_path).graph
-        target = self.repository.load(imported.target_path).graph
+        source = imported.source_graph
+        target = imported.target_graph
 
         if self.source_view.graph is not source:
             self.source_view.set_graph(source, title=f"Source: {source.name} — {len(source.vertices)} V / {len(source.edges)} E")
@@ -1045,7 +1154,7 @@ class MainWindow(QMainWindow):
                 f"valid witness for every source edge: {'yes' if evaluation.feasible else 'no'}\n"
                 f"invalid edges: {invalid}\n"
                 f"candidate-domain check: {candidate_note}"
-                f"{timing_text}"
+                f"{timing_text}",
             )
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
             self.target_view.set_witnesses(imported.saved_edges)
@@ -1062,7 +1171,7 @@ class MainWindow(QMainWindow):
                 f"bottleneck score from saved local costs: "
                 f"{imported.saved_bottleneck_value if imported.saved_bottleneck_value is not None else 'unknown'}\n"
                 "The displayed witnesses are the witnesses stored in the JSON. "
-                "Click 'Score imported φ' to recompute them under the selected cost and options."
+                "Click 'Score imported φ' to recompute them under the selected cost and options.",
             )
         else:
             self.target_view.clear_result_overlays()
@@ -1072,7 +1181,7 @@ class MainWindow(QMainWindow):
                 f"mapping: {len(imported.mapping)} source vertices\n"
                 f"selected cost: {self.current_cost_name}\n"
                 "Click 'Score imported φ' to evaluate this fixed mapping. "
-                "The optimizer will not run and the mapping will not change."
+                "The optimizer will not run and the mapping will not change.",
             )
 
         self.score_mapping_button.setEnabled(not self._busy)
@@ -1231,7 +1340,7 @@ class MainWindow(QMainWindow):
                     target_v=int(raw["target_v"]),
                     cost=float(raw["cost"]),
                     witness=np.ascontiguousarray(witness),
-                )
+                ),
             )
         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
 
@@ -1299,7 +1408,7 @@ class MainWindow(QMainWindow):
                     preferred = str(self.aggregation_combo.currentData())
                     default_index = next((i for i, item in enumerate(available) if item[0] == preferred), 0)
                     selected, accepted = QInputDialog.getItem(
-                        self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels, default_index, False
+                        self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels, default_index, False,
                     )
                     if not accepted:
                         return
@@ -1317,15 +1426,28 @@ class MainWindow(QMainWindow):
             saved_edges = self._parse_saved_edges(raw_edges)
             source_path = self._resolve_import_graph(source_meta, "source", json_path)
             target_path = self._resolve_import_graph(target_meta, "target", json_path)
-            source_loaded = self.repository.load(source_path)
-            target_loaded = self.repository.load(target_path)
-            normalized_source, normalized_target, swapped = normalize_sparse_to_dense(source_loaded, target_loaded)
+            candidate_parameters = payload.get("candidate_parameters")
+            candidate_config = candidate_parameters if isinstance(candidate_parameters, Mapping) else {}
+            saved_rho = float(candidate_config.get("rho", 10.0))
+            saved_top_k = int(candidate_config.get("top_k", 25))
+            saved_mode = CandidateMode(str(candidate_config.get("mode", CandidateMode.TARGET_JUNCTIONS.value)))
+            saved_subdivision_points = int(candidate_config.get("subdivision_points", 2))
+            saved_adaptive_min_separation = float(candidate_config.get("adaptive_min_separation", 1.0))
+            normalized_source, loaded_target, swapped = load_matching_pair(self.repository, source_path, target_path, saved_mode)
+            matching_target = prepare_candidate_target(
+                normalized_source.graph,
+                loaded_target.graph,
+                candidate_mode=saved_mode,
+                rho=saved_rho,
+                subdivision_points=saved_subdivision_points,
+                adaptive_min_separation=saved_adaptive_min_separation,
+            )
 
             if swapped:
                 raise ValueError("The imported JSON identifies the denser graph as the source; this UI only supports sparse-to-dense mappings.")
 
             source_vertices = set(normalized_source.graph.vertices)
-            target_vertices = set(normalized_target.graph.vertices)
+            target_vertices = set(matching_target.vertices)
             if set(mapping) != source_vertices:
                 missing = sorted(source_vertices - set(mapping))
                 extra = sorted(set(mapping) - source_vertices)
@@ -1334,8 +1456,9 @@ class MainWindow(QMainWindow):
             if unknown_targets:
                 raise ValueError(f"Imported mapping contains unknown target vertices {unknown_targets}.")
 
+            catalog_target = self.repository.load(target_path)
             self._graph_catalog[source_path] = GraphInfo(source_path, normalized_source.graph.name, len(normalized_source.graph.vertices), len(normalized_source.graph.edges))
-            self._graph_catalog[target_path] = GraphInfo(target_path, normalized_target.graph.name, len(normalized_target.graph.vertices), len(normalized_target.graph.edges))
+            self._graph_catalog[target_path] = GraphInfo(target_path, catalog_target.graph.name, len(catalog_target.graph.vertices), len(catalog_target.graph.edges))
 
             cost_payload = payload.get("cost")
             saved_cost_name = None
@@ -1354,6 +1477,11 @@ class MainWindow(QMainWindow):
                 json_path=json_path,
                 source_path=source_path,
                 target_path=target_path,
+                source_graph=normalized_source.graph,
+                target_graph=matching_target,
+                candidate_mode=saved_mode,
+                subdivision_points=saved_subdivision_points,
+                adaptive_min_separation=saved_adaptive_min_separation,
                 mapping=mapping,
                 saved_cost_name=saved_cost_name,
                 saved_cost_options=saved_cost_options,
@@ -1365,12 +1493,11 @@ class MainWindow(QMainWindow):
             )
             self._imported_mapping = imported
 
-            candidate_parameters = payload.get("candidate_parameters")
-            if isinstance(candidate_parameters, Mapping):
-                if "rho" in candidate_parameters:
-                    self.candidate_rho.setValue(float(candidate_parameters["rho"]))
-                if "top_k" in candidate_parameters:
-                    self.top_k.setValue(int(candidate_parameters["top_k"]))
+            self.candidate_rho.setValue(saved_rho)
+            self.top_k.setValue(saved_top_k)
+            self._select_data(self.candidate_mode_combo, saved_mode.value)
+            self.subdivision_points.setValue(saved_subdivision_points)
+            self.adaptive_min_separation.setValue(saved_adaptive_min_separation)
 
             self._populate_source_choices(preferred_path=source_path)
             if not self._select_path(self.source_combo, source_path):
@@ -1411,6 +1538,9 @@ class MainWindow(QMainWindow):
             paths[1],
             candidate_rho=self.candidate_rho.value(),
             top_k=self.top_k.value(),
+            candidate_mode=self.current_candidate_mode,
+            subdivision_points=self.subdivision_points.value(),
+            adaptive_min_separation=self.adaptive_min_separation.value(),
             mapping=imported.mapping,
             cost_name=self.current_cost_name,
             cost_options=self.cost_options.options_for(self.current_cost_name),
@@ -1432,6 +1562,11 @@ class MainWindow(QMainWindow):
         key = (
             str(raw_outcome.source_path.resolve()),
             str(raw_outcome.target_path.resolve()),
+            float(self.candidate_rho.value()),
+            int(self.top_k.value()),
+            raw_outcome.candidate_mode.value,
+            int(raw_outcome.subdivision_points),
+            float(raw_outcome.adaptive_min_separation),
             raw_outcome.cost_name,
             options,
             tuple(sorted((int(source), int(target)) for source, target in raw_outcome.mapping.items())),
@@ -1465,9 +1600,12 @@ class MainWindow(QMainWindow):
         self.settings.setValue("target_path", str(self.target_combo.currentData() or ""))
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
         self.settings.setValue("top_k", self.top_k.value())
+        self.settings.setValue("candidate_mode", self.current_candidate_mode.value)
+        self.settings.setValue("subdivision_points", self.subdivision_points.value())
+        self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
         self.settings.setValue("cost", self.current_cost_name)
         self.settings.setValue("aggregation", str(self.aggregation_combo.currentData()))
-        getattr(event, "accept")()
+        event.accept()
 
 
 def main() -> int:
