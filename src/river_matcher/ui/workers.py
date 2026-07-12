@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from river_matcher.cancellation import CancellationToken, OperationCancelled
-from river_matcher.candidates import CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target
+from river_matcher.candidates import CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, merge_candidate_sets, prepare_candidate_target
 from river_matcher.costs.base import CostName
 from river_matcher.matcher import AggregationMatchResult, MappingEvaluation, RiverGraphMatcher
 from river_matcher.models import JunctionGraph
@@ -51,6 +51,7 @@ class CatalogOutcome:
 class PairKey:
     source: GraphKey
     target: GraphKey
+    junction_target: GraphKey
     candidate_rho: float
     top_k: int
     candidate_mode: CandidateMode
@@ -220,21 +221,45 @@ class PairSession:
     """Reusable matcher and result cache for one graph pair and candidate configuration."""
 
     def __init__(self, source: LoadedGraph, target: LoadedGraph, *, candidate_rho: float, top_k: int, candidate_mode: CandidateMode | str, subdivision_points: int,
-            adaptive_max_points_per_source: int, adaptive_min_separation: float, ) -> None:
+            adaptive_max_points_per_source: int, adaptive_min_separation: float, junction_target: LoadedGraph | None = None, ) -> None:
         mode = CandidateMode(candidate_mode)
+        baseline_target = target if junction_target is None else junction_target
+        if mode is CandidateMode.ORIGINAL_TARGET_VERTICES and baseline_target.key.variant != "junction":
+            raise ValueError("Original-target mode requires the corresponding junction target for baseline candidates.")
         matching_target = prepare_candidate_target(source.graph, target.graph, candidate_mode=mode, rho=candidate_rho, subdivision_points=subdivision_points,
             adaptive_max_points_per_source=adaptive_max_points_per_source, adaptive_min_separation=adaptive_min_separation, )
         self.source = source
         self.target = LoadedGraph(target.key, matching_target)
+        self.junction_target = baseline_target
         self.candidate_rho = candidate_rho
         self.top_k = top_k
         self.candidate_mode = mode
         self.subdivision_points = int(subdivision_points)
         self.adaptive_max_points_per_source = int(adaptive_max_points_per_source)
         self.adaptive_min_separation = float(adaptive_min_separation)
-        candidate_sets = (
-            compute_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k) if mode is CandidateMode.TARGET_JUNCTIONS else compute_vertex_candidate_sets(
-                source.graph, matching_target, rho=candidate_rho, top_k=top_k))
+        baseline_candidates = compute_candidate_sets(source.graph, baseline_target.graph, rho=candidate_rho, top_k=top_k)
+        matching_vertices = set(matching_target.vertices)
+        missing_junction_vertices = sorted(set(baseline_target.graph.vertices) - matching_vertices)
+        if missing_junction_vertices:
+            raise ValueError(f"Matching target is missing baseline junction vertices: {missing_junction_vertices}")
+
+        if mode is CandidateMode.TARGET_JUNCTIONS:
+            candidate_sets = baseline_candidates
+        else:
+            additional_vertices = matching_vertices - set(baseline_target.graph.vertices)
+            additional_limit = adaptive_max_points_per_source if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS else max(1, len(additional_vertices))
+            additions = compute_vertex_candidate_sets(
+                source.graph,
+                matching_target,
+                rho=candidate_rho,
+                top_k=additional_limit,
+                eligible_vertices=additional_vertices,
+            )
+            candidate_sets = merge_candidate_sets(baseline_candidates, additions)
+
+        unknown_candidates = sorted({candidate for candidates in candidate_sets.values() for candidate in candidates} - matching_vertices)
+        if unknown_candidates:
+            raise ValueError(f"Candidate IDs are not vertices of the matching target: {unknown_candidates}")
         self.matcher = RiverGraphMatcher(source.graph, matching_target, candidate_sets=candidate_sets)
         self._results: dict[CostKey, AggregationMatchResult] = {}
         self._mapping_evaluations: dict[MappingEvaluationKey, MappingEvaluation] = {}
@@ -291,9 +316,10 @@ class PairSessionStore:
         self._lock = threading.RLock()
 
     def get_or_create(self, source: LoadedGraph, target: LoadedGraph, *, candidate_rho: float, top_k: int, candidate_mode: CandidateMode | str, subdivision_points: int,
-            adaptive_max_points_per_source: int, adaptive_min_separation: float, ) -> PairSession:
+            adaptive_max_points_per_source: int, adaptive_min_separation: float, junction_target: LoadedGraph | None = None, ) -> PairSession:
         mode = CandidateMode(candidate_mode)
-        key = PairKey(source.key, target.key, float(candidate_rho), int(top_k), mode, int(subdivision_points), int(adaptive_max_points_per_source),
+        baseline_target = target if junction_target is None else junction_target
+        key = PairKey(source.key, target.key, baseline_target.key, float(candidate_rho), int(top_k), mode, int(subdivision_points), int(adaptive_max_points_per_source),
             float(adaptive_min_separation), )
 
         with self._lock:
@@ -304,7 +330,7 @@ class PairSessionStore:
                 return existing
 
         session = PairSession(source, target, candidate_rho=candidate_rho, top_k=top_k, candidate_mode=mode, subdivision_points=subdivision_points,
-            adaptive_max_points_per_source=adaptive_max_points_per_source, adaptive_min_separation=adaptive_min_separation, )
+            adaptive_max_points_per_source=adaptive_max_points_per_source, adaptive_min_separation=adaptive_min_separation, junction_target=baseline_target, )
 
         with self._lock:
             existing = self._sessions.get(key)
@@ -397,10 +423,11 @@ class PreflightWorker(QRunnable):
             self.cancellation_token.check()
             self.signals.progress.emit("Preparing candidates and tree decomposition")
             source, target, _ = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
+            junction_target = self.repository.load(target.key.path)
             self.cancellation_token.check()
             session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation, )
+                adaptive_min_separation=self.adaptive_min_separation, junction_target=junction_target, )
             self.cancellation_token.check()
             self.signals.result.emit(PreflightOutcome(source_path=source.key.path, target_path=target.key.path, source=session.source.graph, target=session.target.graph,
                 candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode, subdivision_points=self.subdivision_points,
@@ -437,9 +464,10 @@ class MatchWorker(QRunnable):
         try:
             self.cancellation_token.check()
             source, target, swapped = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
+            junction_target = self.repository.load(target.key.path)
             session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation, )
+                adaptive_min_separation=self.adaptive_min_separation, junction_target=junction_target, )
 
             for index, (cost_name, options) in enumerate(self.costs, start=1):
                 self.cancellation_token.check()
@@ -488,9 +516,10 @@ class MappingScoreWorker(QRunnable):
         try:
             self.cancellation_token.check()
             source, target, _ = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
+            junction_target = self.repository.load(target.key.path)
             session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
                 subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation, )
+                adaptive_min_separation=self.adaptive_min_separation, junction_target=junction_target, )
 
             def progress(message: str) -> None:
                 self.signals.progress.emit(message)

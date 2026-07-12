@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from enum import StrEnum
+from collections.abc import Iterable, Mapping
 from typing import Any, cast
 
 import numpy as np
@@ -336,10 +337,28 @@ def compute_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho:
     return _candidate_sets_from_distances(source_ids, endpoints, distances, rho=radius, top_k=limit)
 
 
-def compute_vertex_candidate_sets(source: JunctionGraph, target: JunctionGraph, *, rho: float = 10.0, top_k: int = 25) -> CandidateSets:
+def compute_vertex_candidate_sets(
+    source: JunctionGraph,
+    target: JunctionGraph,
+    *,
+    rho: float = 10.0,
+    top_k: int = 25,
+    eligible_vertices: Iterable[int] | None = None,
+) -> CandidateSets:
     """Rank existing target vertices by point-to-point distance."""
     radius, limit = _normalize_parameters(rho, top_k)
-    target_ids = np.asarray(sorted(target.vertices), dtype=np.int64)
+    target_vertices = set(target.vertices)
+    if eligible_vertices is None:
+        selected_vertices = sorted(target_vertices)
+    else:
+        selected_vertices = sorted({int(vertex) for vertex in eligible_vertices})
+        unknown = sorted(set(selected_vertices) - target_vertices)
+        if unknown:
+            raise ValueError(f"Eligible candidate vertices are not in target graph: {unknown}")
+    if not selected_vertices:
+        return {int(source_vertex): [] for source_vertex in sorted(source.vertices)}
+
+    target_ids = np.asarray(selected_vertices, dtype=np.int64)
     target_points = np.asarray([target.coordinates[int(vertex)] for vertex in target_ids], dtype=np.float64)
     candidate_sets: CandidateSets = {}
 
@@ -350,6 +369,27 @@ def compute_vertex_candidate_sets(source: JunctionGraph, target: JunctionGraph, 
             key=lambda item: (item[0], item[1]), )
         candidate_sets[source_vertex] = [vertex for _, vertex in ordered[:limit]]
     return candidate_sets
+
+
+def merge_candidate_sets(
+    baseline: Mapping[int, Iterable[int]],
+    additions: Mapping[int, Iterable[int]],
+) -> CandidateSets:
+    """Append deterministic mode-specific candidates without truncating baseline candidates."""
+    source_vertices = sorted(set(baseline) | set(additions))
+    merged: CandidateSets = {}
+    for source_vertex in source_vertices:
+        output: list[int] = []
+        seen: set[int] = set()
+        for candidates in (baseline.get(source_vertex, ()), additions.get(source_vertex, ())):
+            for raw_vertex in candidates:
+                vertex = int(raw_vertex)
+                if vertex in seen:
+                    continue
+                seen.add(vertex)
+                output.append(vertex)
+        merged[int(source_vertex)] = output
+    return merged
 
 
 def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> float:
