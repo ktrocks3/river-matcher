@@ -82,6 +82,21 @@ def test_candidate_radius_is_inclusive() -> None:
     assert excluded == {1: []}
 
 
+def test_target_junction_candidates_are_monotone_in_radius() -> None:
+    source = make_graph("source", {1: (2.0, 1.0), 2: (8.0, 4.0)})
+    target = make_graph(
+        "target",
+        {10: (0.0, 0.0), 20: (5.0, 0.0), 30: (10.0, 0.0)},
+        (make_edge(0, 10, 20, [(0.0, 0.0), (5.0, 0.0)]), make_edge(1, 20, 30, [(5.0, 0.0), (10.0, 0.0)])),
+    )
+
+    smaller = compute_candidate_sets(source, target, rho=1.5, top_k=10)
+    larger = compute_candidate_sets(source, target, rho=5.0, top_k=10)
+
+    for source_vertex in source.vertices:
+        assert set(smaller[source_vertex]).issubset(larger[source_vertex])
+
+
 def test_zero_radius_accepts_point_on_edge() -> None:
     source = make_graph("source", {1: (2.0, 0.0)})
     target = make_graph("target", {10: (0.0, 0.0), 20: (4.0, 0.0)}, (make_edge(0, 10, 20, [(0.0, 0.0), (4.0, 0.0)]),))

@@ -54,6 +54,18 @@ class ImportedMapping:
         return f"Imported φ: {self.json_path.name}{objective}"
 
 
+@dataclass(frozen=True, slots=True)
+class PendingRun:
+    paths: tuple[Path, Path]
+    costs: tuple[tuple[str, Mapping[str, object]], ...]
+    candidate_rho: float
+    top_k: int
+    candidate_mode: CandidateMode
+    subdivision_points: int
+    adaptive_max_points_per_source: int
+    adaptive_min_separation: float
+
+
 def _find_graph_directory() -> Path:
     candidates = (Path.cwd() / "GraphExport", Path(__file__).resolve().parents[3] / "GraphExport")
 
@@ -147,7 +159,7 @@ class MainWindow(QMainWindow):
         self._active_token: CancellationToken | None = None
         # Keep the QRunnable alive until its queued finished signal reaches the UI thread.
         self._active_worker: PreflightWorker | MatchWorker | MappingScoreWorker | None = None
-        self._pending_run: tuple[tuple[Path, Path], tuple[tuple[str, Mapping[str, object]], ...]] | None = None
+        self._pending_run: PendingRun | None = None
         self._busy = False
 
         self.source_combo = QComboBox()
@@ -474,6 +486,7 @@ class MainWindow(QMainWindow):
 
     def _target_changed(self) -> None:
         if not self._rebuilding_targets:
+            self._update_direction_label()
             self._pair_changed()
 
     def _pair_changed(self) -> None:
@@ -539,11 +552,20 @@ class MainWindow(QMainWindow):
         self.target_combo.blockSignals(False)
         self._rebuilding_targets = False
 
-        if valid:
-            target = self._graph_catalog[Path(str(self.target_combo.currentData())).resolve()]
-            self.direction_label.setText(f"Sparse-to-dense direction: {source.path.name} ({source.vertices} V) → {target.path.name} ({target.vertices} V)")
-        else:
+        self._update_direction_label()
+
+    def _update_direction_label(self) -> None:
+        paths = self._selected_paths()
+        if paths is None:
             self.direction_label.setText("No denser target is available for this source.")
+            return
+
+        source = self._graph_catalog.get(paths[0].resolve())
+        target = self._graph_catalog.get(paths[1].resolve())
+        if source is None or target is None:
+            self.direction_label.setText("The graph with fewer vertices is always used as the source.")
+            return
+        self.direction_label.setText(f"Sparse-to-dense direction: {source.path.name} ({source.vertices} V) → {target.path.name} ({target.vertices} V)")
 
     @staticmethod
     def _select_data(combo: QComboBox, value: str) -> bool:
@@ -726,7 +748,11 @@ class MainWindow(QMainWindow):
 
         token = CancellationToken()
         self._active_token = token
-        self._pending_run = (paths, tuple(costs))
+        pending = PendingRun(paths=(paths[0].resolve(), paths[1].resolve()), costs=tuple((name, dict(options)) for name, options in costs),
+            candidate_rho=float(self.candidate_rho.value()), top_k=int(self.top_k.value()), candidate_mode=self.current_candidate_mode,
+            subdivision_points=int(self.subdivision_points.value()), adaptive_max_points_per_source=int(self.adaptive_max_points_per_source.value()),
+            adaptive_min_separation=float(self.adaptive_min_separation.value()), )
+        self._pending_run = pending
         self._set_busy(True)
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
         self.settings.setValue("top_k", self.top_k.value())
@@ -735,9 +761,9 @@ class MainWindow(QMainWindow):
         self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
 
-        worker = PreflightWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(),
-                                 candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
-                                 adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(),
+        worker = PreflightWorker(self.repository, self.sessions, pending.paths[0], pending.paths[1], candidate_rho=pending.candidate_rho, top_k=pending.top_k,
+                                 candidate_mode=pending.candidate_mode, subdivision_points=pending.subdivision_points,
+                                 adaptive_max_points_per_source=pending.adaptive_max_points_per_source, adaptive_min_separation=pending.adaptive_min_separation,
                                  cancellation_token=token, )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._preflight_ready)
@@ -748,6 +774,8 @@ class MainWindow(QMainWindow):
 
     def _preflight_ready(self, raw_outcome: object) -> None:
         if not isinstance(raw_outcome, PreflightOutcome) or self._pending_run is None:
+            return
+        if not self._preflight_matches_pending(raw_outcome, self._pending_run):
             return
 
         preflight = raw_outcome.preflight
@@ -777,6 +805,13 @@ class MainWindow(QMainWindow):
         self._launch_match_worker()
 
     @staticmethod
+    def _preflight_matches_pending(outcome: PreflightOutcome, pending: PendingRun) -> bool:
+        return (outcome.source_path.resolve() == pending.paths[0] and outcome.target_path.resolve() == pending.paths[1] and float(
+            outcome.candidate_rho) == pending.candidate_rho and int(outcome.top_k) == pending.top_k and outcome.candidate_mode is pending.candidate_mode and int(
+            outcome.subdivision_points) == pending.subdivision_points and int(outcome.adaptive_max_points_per_source) == pending.adaptive_max_points_per_source and float(
+            outcome.adaptive_min_separation) == pending.adaptive_min_separation)
+
+    @staticmethod
     def _format_preflight(preflight: MatchingPreflight) -> str:
         largest = "none" if preflight.largest_bag is None else str(tuple(sorted(preflight.largest_bag)))
         return ("preflight\n"
@@ -791,10 +826,10 @@ class MainWindow(QMainWindow):
             self._finish_job("No pending run")
             return
 
-        paths, costs = self._pending_run
-        worker = MatchWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(),
-                             candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
-                             adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(), costs=costs,
+        pending = self._pending_run
+        worker = MatchWorker(self.repository, self.sessions, pending.paths[0], pending.paths[1], candidate_rho=pending.candidate_rho, top_k=pending.top_k,
+                             candidate_mode=pending.candidate_mode, subdivision_points=pending.subdivision_points,
+                             adaptive_max_points_per_source=pending.adaptive_max_points_per_source, adaptive_min_separation=pending.adaptive_min_separation, costs=pending.costs,
                              cancellation_token=self._active_token, )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._match_ready)
@@ -816,7 +851,9 @@ class MainWindow(QMainWindow):
         self.status_label.setText(message)
 
     def _match_ready(self, raw_outcome: object) -> None:
-        if not isinstance(raw_outcome, RunOutcome):
+        if not isinstance(raw_outcome, RunOutcome) or self._pending_run is None:
+            return
+        if not self._run_matches_pending(raw_outcome, self._pending_run):
             return
 
         outcome = raw_outcome
@@ -827,6 +864,13 @@ class MainWindow(QMainWindow):
 
         timing = "cached" if outcome.from_cache else f"{outcome.elapsed_seconds:.3f} s"
         self.status_label.setText(f"{outcome.cost_name.replace('_', ' ')} ready ({timing})")
+
+    @staticmethod
+    def _run_matches_pending(outcome: RunOutcome, pending: PendingRun) -> bool:
+        return (outcome.source_path.resolve() == pending.paths[0] and outcome.target_path.resolve() == pending.paths[1] and float(
+            outcome.candidate_rho) == pending.candidate_rho and int(outcome.top_k) == pending.top_k and outcome.candidate_mode is pending.candidate_mode and int(
+            outcome.subdivision_points) == pending.subdivision_points and int(outcome.adaptive_max_points_per_source) == pending.adaptive_max_points_per_source and float(
+            outcome.adaptive_min_separation) == pending.adaptive_min_separation)
 
     def _worker_failed(self, traceback_text: str) -> None:
         self.details.setPlainText(traceback_text)
@@ -1266,7 +1310,7 @@ class MainWindow(QMainWindow):
                     labels = [f"{objective} — score {float(solution.get('value', math.nan)):.12g}" for objective, solution in available]
                     preferred = str(self.aggregation_combo.currentData())
                     default_index = next((i for i, item in enumerate(available) if item[0] == preferred), 0)
-                    selected, accepted = QInputDialog.getItem(self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels,
+                    selected, accepted = QInputDialog.getItem(self, "Choose mapping", "The JSON contains multiple optimized mappings. Which φ should be imported?", labels,
                                                               default_index, False, )
                     if not accepted:
                         return

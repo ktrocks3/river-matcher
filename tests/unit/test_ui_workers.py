@@ -3,10 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from river_matcher.candidates import CandidateMode
 from river_matcher.models import JunctionEdge, JunctionGraph
-from river_matcher.ui.workers import GraphKey, GraphRepository, LoadedGraph, PairSessionStore
+from river_matcher.ui.workers import GraphKey, GraphRepository, LoadedGraph, PairSession, PairSessionStore
 
 
 def loaded(name: str, graph: JunctionGraph) -> LoadedGraph:
@@ -49,3 +50,33 @@ def test_graph_repository_caches_original_and_junction_variants_separately(tmp_p
     assert junction.key != original.key
     assert junction.graph.vertices == (1, 3)
     assert original.graph.vertices == (1, 2, 3)
+
+
+def test_target_junction_session_uses_edge_candidate_generator(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = loaded("source", JunctionGraph("source", {1: (2.0, 1.0), 2: (8.0, 1.0)}, (JunctionEdge(0, 1, 2, np.asarray([(2.0, 1.0), (8.0, 1.0)])),)))
+    target = loaded("target", JunctionGraph("target", {10: (0.0, 0.0), 20: (10.0, 0.0)}, (JunctionEdge(0, 10, 20, np.asarray([(0.0, 0.0), (10.0, 0.0)])),)))
+    received: list[JunctionGraph] = []
+
+    def edge_candidates(source_graph: JunctionGraph, target_graph: JunctionGraph, *, rho: float, top_k: int) -> dict[int, list[int]]:
+        received.append(target_graph)
+        return {1: [10], 2: [20]}
+
+    def unexpected_vertex_candidates(*args: object, **kwargs: object) -> dict[int, list[int]]:
+        raise AssertionError("TARGET_JUNCTIONS must not use vertex candidate ranking")
+
+    monkeypatch.setattr("river_matcher.ui.workers.compute_candidate_sets", edge_candidates)
+    monkeypatch.setattr("river_matcher.ui.workers.compute_vertex_candidate_sets", unexpected_vertex_candidates)
+
+    session = PairSession(
+        source,
+        target,
+        candidate_rho=15.0,
+        top_k=25,
+        candidate_mode=CandidateMode.TARGET_JUNCTIONS,
+        subdivision_points=2,
+        adaptive_max_points_per_source=8,
+        adaptive_min_separation=1.0,
+    )
+
+    assert received == [target.graph]
+    assert session.target.graph is target.graph
