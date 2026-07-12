@@ -26,12 +26,8 @@ class CandidateMode(StrEnum):
 
     @property
     def display_name(self) -> str:
-        return {
-            CandidateMode.TARGET_JUNCTIONS: "Target junctions",
-            CandidateMode.ORIGINAL_TARGET_VERTICES: "Original target vertices",
-            CandidateMode.UNIFORM_TARGET_SUBDIVISION: "Uniform target-edge subdivision",
-            CandidateMode.ADAPTIVE_CLOSEST_POINTS: "Adaptive closest points",
-        }[self]
+        return {CandidateMode.TARGET_JUNCTIONS: "Target junctions", CandidateMode.ORIGINAL_TARGET_VERTICES: "Original target vertices",
+            CandidateMode.UNIFORM_TARGET_SUBDIVISION: "Uniform target-edge subdivision", CandidateMode.ADAPTIVE_CLOSEST_POINTS: "Adaptive closest points", }[self]
 
 
 def _polyline_lengths(polyline: FloatArray) -> tuple[FloatArray, FloatArray, float]:
@@ -126,9 +122,8 @@ def _closest_polyline_fraction(point: tuple[float, float], polyline: FloatArray)
     return math.sqrt(best_squared), best_distance / total
 
 
-def subdivide_graph_adaptive_closest_points(
-    source: JunctionGraph, target: JunctionGraph, *, rho: float, max_points_per_source: int = 8, min_separation: float = 1.0,
-) -> JunctionGraph:
+def subdivide_graph_adaptive_closest_points(source: JunctionGraph, target: JunctionGraph, *, rho: float, max_points_per_source: int = 8,
+        min_separation: float = 1.0, ) -> JunctionGraph:
     """Split target edges at nearby closest points for each source vertex."""
     radius = float(rho)
     limit = int(max_points_per_source)
@@ -178,28 +173,14 @@ def subdivide_graph_adaptive_closest_points(
     return _subdivide_graph(target, fractions_by_edge, name=f"{target.name}_adaptive")
 
 
-def prepare_candidate_target(
-    source: JunctionGraph,
-    target: JunctionGraph,
-    *,
-    candidate_mode: CandidateMode | str,
-    rho: float,
-    subdivision_points: int = 2,
-    adaptive_max_points_per_source: int = 8,
-    adaptive_min_separation: float = 1.0,
-) -> JunctionGraph:
+def prepare_candidate_target(source: JunctionGraph, target: JunctionGraph, *, candidate_mode: CandidateMode | str, rho: float, subdivision_points: int = 2,
+        adaptive_max_points_per_source: int = 8, adaptive_min_separation: float = 1.0, ) -> JunctionGraph:
     """Build the exact target graph whose vertices form the candidate universe."""
     mode = CandidateMode(candidate_mode)
     if mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION:
         return subdivide_graph_uniform(target, samples_per_edge=subdivision_points)
     if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS:
-        return subdivide_graph_adaptive_closest_points(
-            source,
-            target,
-            rho=rho,
-            max_points_per_source=adaptive_max_points_per_source,
-            min_separation=adaptive_min_separation,
-        )
+        return subdivide_graph_adaptive_closest_points(source, target, rho=rho, max_points_per_source=adaptive_max_points_per_source, min_separation=adaptive_min_separation, )
     return target
 
 
@@ -271,20 +252,13 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
         packed_starts = _float64_array(np.empty((0, 2), dtype=np.float64))
         packed_vectors = _float64_array(np.empty((0, 2), dtype=np.float64))
         packed_lengths = _float64_array(np.empty(0, dtype=np.float64))
-    return (
-        _contiguous_int64(np.asarray(endpoints, dtype=np.int64).reshape((-1, 2))),
-        _contiguous_float64(np.asarray(bboxes, dtype=np.float64).reshape((-1, 4))),
-        packed_starts,
-        packed_vectors,
-        packed_lengths,
-        _contiguous_int64(edge_offsets),
-    )
+    return (_contiguous_int64(np.asarray(endpoints, dtype=np.int64).reshape((-1, 2))), _contiguous_float64(np.asarray(bboxes, dtype=np.float64).reshape((-1, 4))), packed_starts,
+            packed_vectors, packed_lengths, _contiguous_int64(edge_offsets),)
 
 
 @njit(cache=True, parallel=True, fastmath=False)
-def _candidate_edge_distances_numba(
-    source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray, rho: float,
-) -> FloatArray:
+def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
+        edge_offsets: IntArray, rho: float, ) -> FloatArray:
     """Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
     point-to-segment projection."""
     source_count = source_points.shape[0]
@@ -310,7 +284,7 @@ def _candidate_edge_distances_numba(
 
                 offset_x = sx + projection * vx - px
                 offset_y = sy + projection * vy - py
-                squared_distance = offset_x**2 + offset_y**2
+                squared_distance = offset_x ** 2 + offset_y ** 2
                 if squared_distance < best_squared:
                     best_squared = squared_distance
             if math.isfinite(best_squared):
@@ -372,14 +346,8 @@ def compute_vertex_candidate_sets(source: JunctionGraph, target: JunctionGraph, 
     for source_vertex in sorted(source.vertices):
         point = np.asarray(source.coordinates[source_vertex], dtype=np.float64)
         distances = np.linalg.norm(target_points - point, axis=1)
-        ordered = sorted(
-            (
-                (float(distances[index]), int(target_ids[index]))
-                for index in range(len(target_ids))
-                if float(distances[index]) <= radius
-            ),
-            key=lambda item: (item[0], item[1]),
-        )
+        ordered = sorted(((float(distances[index]), int(target_ids[index])) for index in range(len(target_ids)) if float(distances[index]) <= radius),
+            key=lambda item: (item[0], item[1]), )
         candidate_sets[source_vertex] = [vertex for _, vertex in ordered[:limit]]
     return candidate_sets
 
@@ -392,9 +360,8 @@ def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> flo
     return math.hypot(dx, dy)
 
 
-def _point_to_packed_edge_distance(
-    point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray, edge_offsets: IntArray,
-) -> float:
+def _point_to_packed_edge_distance(point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
+        edge_offsets: IntArray, ) -> float:
     """Reference point-to-edge distance using the packed segment arrays."""
     px, py = point
     best_squared = math.inf

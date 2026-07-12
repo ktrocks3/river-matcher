@@ -223,8 +223,7 @@ def _assignment_order(plan: BagPlan, candidates: Mapping[int, tuple[int, ...]], 
 
 def _solve(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, objectives: tuple[Objective, ...], *,
            compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, evaluate_costs: bool = True,
-           edge_weights: Mapping[int, float] | None = None) -> tuple[
-    dict[Objective, DPSolution | None], DPStatistics]:
+           edge_weights: Mapping[int, float] | None = None) -> tuple[dict[Objective, DPSolution | None], DPStatistics]:
     if not objectives:
         raise ValueError("At least one objective must be requested.")
 
@@ -516,28 +515,10 @@ def solve_tree_dp_both(decomposition: SourceDecomposition, candidate_sets: Candi
     return BothObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK], statistics=statistics)
 
 
-def solve_tree_dp_all(
-    decomposition: SourceDecomposition,
-    candidate_sets: CandidateSets,
-    edge_cost: EdgeCost,
-    *,
-    edge_weights: Mapping[int, float],
-    compatibility: TargetConnectivityCompatibility | None = None,
-    cancellation_token: CancellationToken | None = None,
-) -> AllObjectiveResult:
+def solve_tree_dp_all(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, *, edge_weights: Mapping[int, float],
+        compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, ) -> AllObjectiveResult:
     objectives = (Objective.ADDITIVE, Objective.BOTTLENECK, Objective.LENGTH_WEIGHTED_ADDITIVE)
-    solutions, statistics = _solve(
-        decomposition,
-        candidate_sets,
-        edge_cost,
-        objectives,
-        compatibility=compatibility,
-        cancellation_token=cancellation_token,
-        edge_weights=edge_weights,
-    )
-    return AllObjectiveResult(
-        additive=solutions[Objective.ADDITIVE],
-        bottleneck=solutions[Objective.BOTTLENECK],
-        length_weighted_additive=solutions[Objective.LENGTH_WEIGHTED_ADDITIVE],
-        statistics=statistics,
-    )
+    solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, objectives, compatibility=compatibility, cancellation_token=cancellation_token,
+        edge_weights=edge_weights, )
+    return AllObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK],
+        length_weighted_additive=solutions[Objective.LENGTH_WEIGHTED_ADDITIVE], statistics=statistics, )

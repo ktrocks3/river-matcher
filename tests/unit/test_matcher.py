@@ -15,7 +15,7 @@ type CandidateSets = dict[int, tuple[int, ...]]
 
 def make_graph(name: str, coordinates: dict[int, tuple[float, float]], edges: tuple[EdgeSpec, ...]) -> JunctionGraph:
     return JunctionGraph(name=name, coordinates=coordinates,
-        edges=tuple(JunctionEdge(id=edge_id, u=u, v=v, polyline=np.asarray([coordinates[u], coordinates[v]], dtype=np.float64)) for edge_id, u, v in edges))
+                         edges=tuple(JunctionEdge(id=edge_id, u=u, v=v, polyline=np.asarray([coordinates[u], coordinates[v]], dtype=np.float64)) for edge_id, u, v in edges))
 
 
 def make_graphs() -> tuple[JunctionGraph, JunctionGraph]:

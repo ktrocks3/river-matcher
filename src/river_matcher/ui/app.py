@@ -9,26 +9,8 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QLocale, QSettings, Qt, QThreadPool, QTimer
-from PySide6.QtWidgets import (
-    QApplication,
-    QComboBox,
-    QDoubleSpinBox,
-    QFileDialog,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QMainWindow,
-    QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
-    QPushButton,
-    QSpinBox,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMessageBox,
+                               QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget, )
 
 from river_matcher.cancellation import CancellationToken
 from river_matcher.candidates import CandidateMode, prepare_candidate_target
@@ -38,22 +20,8 @@ from river_matcher.matcher import AggregationMatchResult, MatchedEdge, MatchSolu
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
-from river_matcher.ui.workers import (
-    CatalogOutcome,
-    CatalogWorker,
-    GraphInfo,
-    GraphRepository,
-    MappingScoreOutcome,
-    MappingScoreWorker,
-    MatchWorker,
-    PairSessionStore,
-    PreflightOutcome,
-    PreflightWorker,
-    PreviewOutcome,
-    PreviewWorker,
-    RunOutcome,
-    load_matching_pair,
-)
+from river_matcher.ui.workers import (CatalogOutcome, CatalogWorker, GraphInfo, GraphRepository, MappingScoreOutcome, MappingScoreWorker, MatchWorker, PairSessionStore,
+                                      PreflightOutcome, PreflightWorker, PreviewOutcome, PreviewWorker, RunOutcome, load_matching_pair, )
 
 _WARN_STATE_LIMIT = 2_000_000
 _BLOCK_STATE_LIMIT = 10_000_000
@@ -100,39 +68,19 @@ def _solution_payload(solution: MatchSolution | None) -> dict[str, object]:
     if solution is None:
         return {"feasible": False}
 
-    return {
-        "feasible": True,
-        "objective": solution.objective.value,
-        "value": float(solution.value),
-        "mapping": [{"source_vertex": int(source), "target_vertex": int(target)} for source, target in sorted(solution.mapping.items())],
-        "edges": [
-            {
-                "edge_id": int(edge.edge_id),
-                "source_u": int(edge.source_u),
-                "source_v": int(edge.source_v),
-                "target_u": int(edge.target_u),
-                "target_v": int(edge.target_v),
-                "cost": float(edge.cost),
-                "witness": edge.witness.tolist(),
-            }
-            for edge in solution.edges
-        ],
-    }
+    return {"feasible": True, "objective": solution.objective.value, "value": float(solution.value),
+            "mapping": [{"source_vertex": int(source), "target_vertex": int(target)} for source, target in sorted(solution.mapping.items())], "edges": [
+            {"edge_id": int(edge.edge_id), "source_u": int(edge.source_u), "source_v": int(edge.source_v), "target_u": int(edge.target_u), "target_v": int(edge.target_v),
+             "cost": float(edge.cost), "witness": edge.witness.tolist(), } for edge in solution.edges], }
 
 
 def _preflight_payload(preflight: MatchingPreflight | None) -> dict[str, object] | None:
     if preflight is None:
         return None
 
-    return {
-        "empty_domains": preflight.empty_domains,
-        "total_candidates": preflight.total_candidates,
-        "minimum_candidates": preflight.minimum_candidates,
-        "maximum_candidates": preflight.maximum_candidates,
-        "estimated_state_upper_bound": preflight.estimated_state_upper_bound,
-        "largest_candidate_product": preflight.largest_candidate_product,
-        "largest_bag": None if preflight.largest_bag is None else sorted(preflight.largest_bag),
-    }
+    return {"empty_domains": preflight.empty_domains, "total_candidates": preflight.total_candidates, "minimum_candidates": preflight.minimum_candidates,
+            "maximum_candidates": preflight.maximum_candidates, "estimated_state_upper_bound": preflight.estimated_state_upper_bound,
+            "largest_candidate_product": preflight.largest_candidate_product, "largest_bag": None if preflight.largest_bag is None else sorted(preflight.largest_bag), }
 
 
 def _result_payload(outcome: RunOutcome) -> dict[str, object]:
@@ -143,84 +91,40 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
     dp = result.dp_statistics
     compatibility = result.compatibility_statistics
 
-    return {
-        "schema_version": 2,
-        "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
-        "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
-        "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)},
-        "candidate_parameters": {
-            "rho": outcome.candidate_rho,
-            "top_k": outcome.top_k,
-            "mode": outcome.candidate_mode.value,
-            "subdivision_points": outcome.subdivision_points,
-            "adaptive_max_points_per_source": outcome.adaptive_max_points_per_source,
-            "adaptive_min_separation": outcome.adaptive_min_separation,
-        },
-        "candidate_statistics": {
-            "source_vertices": candidates.source_vertices,
-            "empty_domains": candidates.empty_domains,
-            "total_candidates": candidates.total_candidates,
-            "minimum_candidates": candidates.minimum_candidates,
-            "maximum_candidates": candidates.maximum_candidates,
-        },
-        "effective_candidate_statistics": {
-            "source_vertices": effective.source_vertices,
-            "empty_domains": effective.empty_domains,
-            "total_candidates": effective.total_candidates,
-            "minimum_candidates": effective.minimum_candidates,
-            "maximum_candidates": effective.maximum_candidates,
-        },
-        "candidate_sets": {str(vertex): list(values) for vertex, values in result.candidate_sets.items()},
-        "effective_candidate_sets": {str(vertex): list(values) for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()},
-        "preflight": _preflight_payload(result.preflight),
-        "effective_preflight": _preflight_payload(result.effective_preflight),
-        "compatibility": None
-        if compatibility is None
-        else {
-            "initial_candidates": compatibility.initial_candidates,
-            "remaining_candidates": compatibility.remaining_candidates,
-            "removed_candidates": compatibility.removed_candidates,
-            "revised_arcs": compatibility.revised_arcs,
-            "empty_domains": compatibility.empty_domains,
-        },
-        "decomposition": {
-            "width": decomposition.width,
-            "maximum_bag_size": decomposition.maximum_bag_size,
-            "bag_count": decomposition.bag_count,
-            "heuristic": decomposition.heuristic.value,
-            "minimum_fill_width": decomposition.minimum_fill_width,
-            "minimum_degree_width": decomposition.minimum_degree_width,
-        },
-        "dynamic_programming": {
-            "enumerated_states": dp.enumerated_states,
-            "feasible_states": dp.feasible_states,
-            "message_entries": dp.message_entries,
-            "unique_cost_requests": dp.unique_cost_requests,
-            "partial_assignments": dp.partial_assignments,
-        },
-        "timing": None
-        if result.timing is None
-        else {
-            "arc_consistency_seconds": result.timing.arc_consistency_seconds,
-            "feasibility_dp_seconds": result.timing.feasibility_dp_seconds,
-            "cost_setup_seconds": result.timing.cost_setup_seconds,
-            "cost_dp_seconds": result.timing.cost_dp_seconds,
-            "materialization_seconds": result.timing.materialization_seconds,
-            "uncached_local_cost_seconds": result.timing.uncached_local_cost_seconds,
-            "uncached_local_cost_calls": result.timing.uncached_local_cost_calls,
-            "local_cost_cache_hits": result.timing.local_cost_cache_hits,
-            "witness_adjacency_seconds": result.timing.witness_adjacency_seconds,
-            "witness_adjacency_builds": result.timing.witness_adjacency_builds,
-            "witness_dijkstra_seconds": result.timing.witness_dijkstra_seconds,
-            "witness_dijkstra_runs": result.timing.witness_dijkstra_runs,
-            "feasibility_reused": result.timing.feasibility_reused,
-        },
-        "solutions": {
-            Objective.ADDITIVE.value: _solution_payload(result.additive),
-            Objective.BOTTLENECK.value: _solution_payload(result.bottleneck),
-            Objective.LENGTH_WEIGHTED_ADDITIVE.value: _solution_payload(result.length_weighted_additive),
-        },
-    }
+    return {"schema_version": 2,
+            "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
+            "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
+            "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)},
+            "candidate_parameters": {"rho": outcome.candidate_rho, "top_k": outcome.top_k, "mode": outcome.candidate_mode.value, "subdivision_points": outcome.subdivision_points,
+                                     "adaptive_max_points_per_source": outcome.adaptive_max_points_per_source, "adaptive_min_separation": outcome.adaptive_min_separation, },
+            "candidate_statistics": {"source_vertices": candidates.source_vertices, "empty_domains": candidates.empty_domains, "total_candidates": candidates.total_candidates,
+                                     "minimum_candidates": candidates.minimum_candidates, "maximum_candidates": candidates.maximum_candidates, },
+            "effective_candidate_statistics": {"source_vertices": effective.source_vertices, "empty_domains": effective.empty_domains,
+                                               "total_candidates": effective.total_candidates, "minimum_candidates": effective.minimum_candidates,
+                                               "maximum_candidates": effective.maximum_candidates, },
+            "candidate_sets": {str(vertex): list(values) for vertex, values in result.candidate_sets.items()},
+            "effective_candidate_sets": {str(vertex): list(values) for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()},
+            "preflight": _preflight_payload(result.preflight), "effective_preflight": _preflight_payload(result.effective_preflight),
+            "compatibility": None if compatibility is None else {"initial_candidates": compatibility.initial_candidates, "remaining_candidates": compatibility.remaining_candidates,
+                                                                 "removed_candidates": compatibility.removed_candidates, "revised_arcs": compatibility.revised_arcs,
+                                                                 "empty_domains": compatibility.empty_domains, },
+            "decomposition": {"width": decomposition.width, "maximum_bag_size": decomposition.maximum_bag_size, "bag_count": decomposition.bag_count,
+                              "heuristic": decomposition.heuristic.value, "minimum_fill_width": decomposition.minimum_fill_width,
+                              "minimum_degree_width": decomposition.minimum_degree_width, },
+            "dynamic_programming": {"enumerated_states": dp.enumerated_states, "feasible_states": dp.feasible_states, "message_entries": dp.message_entries,
+                                    "unique_cost_requests": dp.unique_cost_requests, "partial_assignments": dp.partial_assignments, },
+            "timing": None if result.timing is None else {"arc_consistency_seconds": result.timing.arc_consistency_seconds,
+                                                          "feasibility_dp_seconds": result.timing.feasibility_dp_seconds, "cost_setup_seconds": result.timing.cost_setup_seconds,
+                                                          "cost_dp_seconds": result.timing.cost_dp_seconds, "materialization_seconds": result.timing.materialization_seconds,
+                                                          "uncached_local_cost_seconds": result.timing.uncached_local_cost_seconds,
+                                                          "uncached_local_cost_calls": result.timing.uncached_local_cost_calls,
+                                                          "local_cost_cache_hits": result.timing.local_cost_cache_hits,
+                                                          "witness_adjacency_seconds": result.timing.witness_adjacency_seconds,
+                                                          "witness_adjacency_builds": result.timing.witness_adjacency_builds,
+                                                          "witness_dijkstra_seconds": result.timing.witness_dijkstra_seconds,
+                                                          "witness_dijkstra_runs": result.timing.witness_dijkstra_runs, "feasibility_reused": result.timing.feasibility_reused, },
+            "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck),
+                          Objective.LENGTH_WEIGHTED_ADDITIVE.value: _solution_payload(result.length_weighted_additive), }, }
 
 
 class MainWindow(QMainWindow):
@@ -336,18 +240,8 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, int, int, float, str, str]:
         options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (
-            str(outcome.source_path.resolve()),
-            str(outcome.target_path.resolve()),
-            float(outcome.candidate_rho),
-            int(outcome.top_k),
-            outcome.candidate_mode.value,
-            int(outcome.subdivision_points),
-            int(outcome.adaptive_max_points_per_source),
-            float(outcome.adaptive_min_separation),
-            outcome.cost_name,
-            options,
-        )
+        return (str(outcome.source_path.resolve()), str(outcome.target_path.resolve()), float(outcome.candidate_rho), int(outcome.top_k), outcome.candidate_mode.value,
+                int(outcome.subdivision_points), int(outcome.adaptive_max_points_per_source), float(outcome.adaptive_min_separation), outcome.cost_name, options,)
 
     def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, int, int, float, str, str] | None:
         paths = self._selected_paths()
@@ -356,26 +250,15 @@ class MainWindow(QMainWindow):
             return None
 
         options = json.dumps(self.cost_options.options_for(cost_name), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (
-            str(paths[0].resolve()),
-            str(paths[1].resolve()),
-            float(self.candidate_rho.value()),
-            int(self.top_k.value()),
-            self.current_candidate_mode.value,
-            int(self.subdivision_points.value()),
-            int(self.adaptive_max_points_per_source.value()),
-            float(self.adaptive_min_separation.value()),
-            cost_name,
-            options,
-        )
+        return (str(paths[0].resolve()), str(paths[1].resolve()), float(self.candidate_rho.value()), int(self.top_k.value()), self.current_candidate_mode.value,
+                int(self.subdivision_points.value()), int(self.adaptive_max_points_per_source.value()), float(self.adaptive_min_separation.value()), cost_name, options,)
 
     @property
     def _display_mode(self) -> str:
         return str(self.mapping_mode_combo.currentData() or "computed")
 
-    def _mapping_score_key(
-        self, mapping: Mapping[int, int], cost_name: str | None = None,
-    ) -> tuple[str, str, float, int, str, int, int, float, str, str, tuple[tuple[int, int], ...]] | None:
+    def _mapping_score_key(self, mapping: Mapping[int, int], cost_name: str | None = None, ) -> tuple[str, str, float, int, str, int, int, float, str, str, tuple[
+        tuple[int, int], ...]] | None:
         paths = self._selected_paths()
 
         if paths is None:
@@ -383,19 +266,9 @@ class MainWindow(QMainWindow):
 
         resolved_cost = self.current_cost_name if cost_name is None else cost_name
         options = json.dumps(self.cost_options.options_for(resolved_cost), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return (
-            str(paths[0].resolve()),
-            str(paths[1].resolve()),
-            float(self.candidate_rho.value()),
-            int(self.top_k.value()),
-            self.current_candidate_mode.value,
-            int(self.subdivision_points.value()),
-            int(self.adaptive_max_points_per_source.value()),
-            float(self.adaptive_min_separation.value()),
-            resolved_cost,
-            options,
-            tuple(sorted((int(source), int(target)) for source, target in mapping.items())),
-        )
+        return (str(paths[0].resolve()), str(paths[1].resolve()), float(self.candidate_rho.value()), int(self.top_k.value()), self.current_candidate_mode.value,
+                int(self.subdivision_points.value()), int(self.adaptive_max_points_per_source.value()), float(self.adaptive_min_separation.value()), resolved_cost, options,
+                tuple(sorted((int(source), int(target)) for source, target in mapping.items())),)
 
     def _imported_pair_is_current(self) -> bool:
         imported = self._imported_mapping
@@ -554,10 +427,8 @@ class MainWindow(QMainWindow):
         if previous is None and self.source_combo.currentData():
             previous = Path(str(self.source_combo.currentData())).resolve()
 
-        graphs = sorted(
-            (graph for graph in self._graph_catalog.values() if any(other.vertices > graph.vertices for other in self._graph_catalog.values())),
-            key=lambda graph: (graph.vertices, graph.path.name.lower()),
-        )
+        graphs = sorted((graph for graph in self._graph_catalog.values() if any(other.vertices > graph.vertices for other in self._graph_catalog.values())),
+                        key=lambda graph: (graph.vertices, graph.path.name.lower()), )
         self.source_combo.blockSignals(True)
         self.source_combo.clear()
 
@@ -864,19 +735,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
 
-        worker = PreflightWorker(
-            self.repository,
-            self.sessions,
-            paths[0],
-            paths[1],
-            candidate_rho=self.candidate_rho.value(),
-            top_k=self.top_k.value(),
-            candidate_mode=self.current_candidate_mode,
-            subdivision_points=self.subdivision_points.value(),
-            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
-            adaptive_min_separation=self.adaptive_min_separation.value(),
-            cancellation_token=token,
-        )
+        worker = PreflightWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(),
+                                 candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
+                                 adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(),
+                                 cancellation_token=token, )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._preflight_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -892,31 +754,21 @@ class MainWindow(QMainWindow):
         self.details.setPlainText(self._format_preflight(preflight))
 
         if preflight.empty_domains:
-            QMessageBox.information(
-                self, "No complete candidate mapping", f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost.",
-            )
+            QMessageBox.information(self, "No complete candidate mapping",
+                                    f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost.", )
             self._finish_job("Preflight stopped: empty candidate domains")
             return
 
         if preflight.estimated_state_upper_bound > _BLOCK_STATE_LIMIT:
-            QMessageBox.warning(
-                self,
-                "Run blocked",
-                f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states.\n\n"
-                f"The default safety limit is {_BLOCK_STATE_LIMIT:,}. Reduce Candidate rho or Top-k.",
-            )
+            QMessageBox.warning(self, "Run blocked", f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states.\n\n"
+                                                     f"The default safety limit is {_BLOCK_STATE_LIMIT:,}. Reduce Candidate rho or Top-k.", )
             self._finish_job("Preflight blocked an oversized exact-DP run")
             return
 
         if preflight.estimated_state_upper_bound > _WARN_STATE_LIMIT:
-            answer = QMessageBox.question(
-                self,
-                "Large exact-DP run",
-                f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states "
-                f"and a largest bag product of {preflight.largest_candidate_product:,}.\n\nContinue?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
+            answer = QMessageBox.question(self, "Large exact-DP run", f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states "
+                                                                      f"and a largest bag product of {preflight.largest_candidate_product:,}.\n\nContinue?",
+                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No, )
 
             if answer != QMessageBox.StandardButton.Yes:
                 self._finish_job("Run cancelled after preflight warning")
@@ -927,14 +779,12 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _format_preflight(preflight: MatchingPreflight) -> str:
         largest = "none" if preflight.largest_bag is None else str(tuple(sorted(preflight.largest_bag)))
-        return (
-            "preflight\n"
-            f"candidate domains: {preflight.total_candidates} total, {preflight.empty_domains} empty\n"
-            f"candidate range: {preflight.minimum_candidates}–{preflight.maximum_candidates}\n"
-            f"estimated bag states: {preflight.estimated_state_upper_bound:,}\n"
-            f"largest bag product: {preflight.largest_candidate_product:,}\n"
-            f"largest bag: {largest}"
-        )
+        return ("preflight\n"
+                f"candidate domains: {preflight.total_candidates} total, {preflight.empty_domains} empty\n"
+                f"candidate range: {preflight.minimum_candidates}–{preflight.maximum_candidates}\n"
+                f"estimated bag states: {preflight.estimated_state_upper_bound:,}\n"
+                f"largest bag product: {preflight.largest_candidate_product:,}\n"
+                f"largest bag: {largest}")
 
     def _launch_match_worker(self) -> None:
         if self._pending_run is None or self._active_token is None:
@@ -942,20 +792,10 @@ class MainWindow(QMainWindow):
             return
 
         paths, costs = self._pending_run
-        worker = MatchWorker(
-            self.repository,
-            self.sessions,
-            paths[0],
-            paths[1],
-            candidate_rho=self.candidate_rho.value(),
-            top_k=self.top_k.value(),
-            candidate_mode=self.current_candidate_mode,
-            subdivision_points=self.subdivision_points.value(),
-            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
-            adaptive_min_separation=self.adaptive_min_separation.value(),
-            costs=costs,
-            cancellation_token=self._active_token,
-        )
+        worker = MatchWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(),
+                             candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
+                             adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(), costs=costs,
+                             cancellation_token=self._active_token, )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._match_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -1058,14 +898,12 @@ class MainWindow(QMainWindow):
             return ""
 
         feasibility = "cached" if timing.feasibility_reused else f"{timing.feasibility_dp_seconds:.3f} s"
-        return (
-            f"\ntiming: arc consistency {timing.arc_consistency_seconds:.3f} s, feasibility DP {feasibility}, "
-            f"cost setup {timing.cost_setup_seconds:.3f} s, cost DP {timing.cost_dp_seconds:.3f} s, "
-            f"materialization {timing.materialization_seconds:.3f} s\n"
-            f"local costs: {timing.uncached_local_cost_calls:,} uncached in {timing.uncached_local_cost_seconds:.3f} s; "
-            f"guided adjacency {timing.witness_adjacency_seconds:.3f} s / {timing.witness_adjacency_builds:,} builds; "
-            f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s / {timing.witness_dijkstra_runs:,} runs"
-        )
+        return (f"\ntiming: arc consistency {timing.arc_consistency_seconds:.3f} s, feasibility DP {feasibility}, "
+                f"cost setup {timing.cost_setup_seconds:.3f} s, cost DP {timing.cost_dp_seconds:.3f} s, "
+                f"materialization {timing.materialization_seconds:.3f} s\n"
+                f"local costs: {timing.uncached_local_cost_calls:,} uncached in {timing.uncached_local_cost_seconds:.3f} s; "
+                f"guided adjacency {timing.witness_adjacency_seconds:.3f} s / {timing.witness_adjacency_builds:,} builds; "
+                f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s / {timing.witness_dijkstra_runs:,} runs")
 
     def _display_outcome(self, outcome: RunOutcome) -> None:
         self._current_outcome = outcome
@@ -1082,35 +920,31 @@ class MainWindow(QMainWindow):
         if solution is None:
             self.target_view.clear_result_overlays()
             self.score_label.setText("Score: infeasible")
-            self.details.setPlainText(
-                f"cost: {outcome.cost_name}\n"
-                f"aggregation: {self.aggregation_combo.currentData()}\n"
-                "No globally feasible mapping exists for these candidate domains.\n"
-                f"arc-consistency removed: {pruning} candidates\n"
-                f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
-                f"effective state estimate: {estimate:,}"
-                f"{self._format_timing(result)}",
-            )
+            self.details.setPlainText(f"cost: {outcome.cost_name}\n"
+                                      f"aggregation: {self.aggregation_combo.currentData()}\n"
+                                      "No globally feasible mapping exists for these candidate domains.\n"
+                                      f"arc-consistency removed: {pruning} candidates\n"
+                                      f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
+                                      f"effective state estimate: {estimate:,}"
+                                      f"{self._format_timing(result)}", )
             self.save_button.setEnabled(True)
             return
 
         self.target_view.set_witnesses(solution.edges)
         self.score_label.setText(f"Optimal {solution.objective.value}: {solution.value:.12g}")
         dp = result.dp_statistics
-        self.details.setPlainText(
-            f"cost: {outcome.cost_name}\n"
-            f"aggregation: {solution.objective.value}\n"
-            f"optimal score: {solution.value:.12g}\n"
-            f"mapping: {len(solution.mapping)} source vertices\n"
-            f"witnesses: {len(solution.edges)} source edges\n"
-            f"candidate pruning: {result.candidate_statistics.total_candidates} → {effective.total_candidates} "
-            f"({pruning} removed)\n"
-            f"effective state estimate: {estimate:,}\n"
-            f"DP: {dp.enumerated_states:,} complete states, {dp.partial_assignments:,} partial assignments, "
-            f"{dp.message_entries:,} messages, {dp.unique_cost_requests:,} unique local costs\n"
-            f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}"
-            f"{self._format_timing(result)}",
-        )
+        self.details.setPlainText(f"cost: {outcome.cost_name}\n"
+                                  f"aggregation: {solution.objective.value}\n"
+                                  f"optimal score: {solution.value:.12g}\n"
+                                  f"mapping: {len(solution.mapping)} source vertices\n"
+                                  f"witnesses: {len(solution.edges)} source edges\n"
+                                  f"candidate pruning: {result.candidate_statistics.total_candidates} → {effective.total_candidates} "
+                                  f"({pruning} removed)\n"
+                                  f"effective state estimate: {estimate:,}\n"
+                                  f"DP: {dp.enumerated_states:,} complete states, {dp.partial_assignments:,} partial assignments, "
+                                  f"{dp.message_entries:,} messages, {dp.unique_cost_requests:,} unique local costs\n"
+                                  f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}"
+                                  f"{self._format_timing(result)}", )
         self.save_button.setEnabled(True)
 
     def _saved_import_matches_current_cost(self) -> bool:
@@ -1164,32 +998,28 @@ class MainWindow(QMainWindow):
             if len(evaluation.invalid_edge_ids) > 20:
                 invalid += f", … ({len(evaluation.invalid_edge_ids)} total)"
             candidate_note = (
-                f"{len(evaluation.candidate_violations)} source vertices lie outside the current candidate domains"
-                if evaluation.candidate_violations
-                else "all mapped vertices lie inside the current candidate domains"
-            )
+                f"{len(evaluation.candidate_violations)} source vertices lie outside the current candidate domains" if evaluation.candidate_violations else "all mapped vertices "
+                                                                                                                                                            "lie inside the "
+                                                                                                                                                            "current candidate "
+                                                                                                                                                            "domains")
             timing = evaluation.timing
             timing_text = ""
             if timing is not None:
-                timing_text = (
-                    f"\nevaluation timing: {outcome.elapsed_seconds:.3f} s total; "
-                    f"{timing.uncached_local_cost_calls:,} uncached local costs in "
-                    f"{timing.uncached_local_cost_seconds:.3f} s; "
-                    f"guided adjacency {timing.witness_adjacency_seconds:.3f} s; "
-                    f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s"
-                )
-            self.details.setPlainText(
-                f"displayed mapping: imported φ from {imported.json_path.name}\n"
-                f"mapping: {len(imported.mapping)} source vertices\n"
-                f"scored with: {outcome.cost_name}\n"
-                f"additive score: {evaluation.additive_value:.12g}\n"
-                f"bottleneck score: {evaluation.bottleneck_value:.12g}\n"
-                f"length-weighted additive score: {evaluation.length_weighted_additive_value:.12g}\n"
-                f"valid witness for every source edge: {'yes' if evaluation.feasible else 'no'}\n"
-                f"invalid edges: {invalid}\n"
-                f"candidate-domain check: {candidate_note}"
-                f"{timing_text}",
-            )
+                timing_text = (f"\nevaluation timing: {outcome.elapsed_seconds:.3f} s total; "
+                               f"{timing.uncached_local_cost_calls:,} uncached local costs in "
+                               f"{timing.uncached_local_cost_seconds:.3f} s; "
+                               f"guided adjacency {timing.witness_adjacency_seconds:.3f} s; "
+                               f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s")
+            self.details.setPlainText(f"displayed mapping: imported φ from {imported.json_path.name}\n"
+                                      f"mapping: {len(imported.mapping)} source vertices\n"
+                                      f"scored with: {outcome.cost_name}\n"
+                                      f"additive score: {evaluation.additive_value:.12g}\n"
+                                      f"bottleneck score: {evaluation.bottleneck_value:.12g}\n"
+                                      f"length-weighted additive score: {evaluation.length_weighted_additive_value:.12g}\n"
+                                      f"valid witness for every source edge: {'yes' if evaluation.feasible else 'no'}\n"
+                                      f"invalid edges: {invalid}\n"
+                                      f"candidate-domain check: {candidate_note}"
+                                      f"{timing_text}", )
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
             self.target_view.set_witnesses(imported.saved_edges)
             if objective == Objective.BOTTLENECK.value:
@@ -1200,30 +1030,26 @@ class MainWindow(QMainWindow):
                 value = imported.saved_additive_value
             value_text = "—" if value is None else f"{value:.12g}"
             self.score_label.setText(f"Imported φ {objective}: {value_text}")
-            self.details.setPlainText(
-                f"displayed mapping: imported φ from {imported.json_path.name}\n"
-                f"mapping: {len(imported.mapping)} source vertices\n"
-                f"saved cost: {imported.saved_cost_name}\n"
-                f"saved mapping aggregation: {imported.saved_objective or 'unknown'}\n"
-                f"additive score from saved local costs: "
-                f"{imported.saved_additive_value if imported.saved_additive_value is not None else 'unknown'}\n"
-                f"bottleneck score from saved local costs: "
-                f"{imported.saved_bottleneck_value if imported.saved_bottleneck_value is not None else 'unknown'}\n"
-                f"length-weighted additive score from saved local costs: "
-                f"{imported.saved_length_weighted_additive_value if imported.saved_length_weighted_additive_value is not None else 'unknown'}\n"
-                "The displayed witnesses are the witnesses stored in the JSON. "
-                "Click 'Score imported φ' to recompute them under the selected cost and options.",
-            )
+            self.details.setPlainText(f"displayed mapping: imported φ from {imported.json_path.name}\n"
+                                      f"mapping: {len(imported.mapping)} source vertices\n"
+                                      f"saved cost: {imported.saved_cost_name}\n"
+                                      f"saved mapping aggregation: {imported.saved_objective or 'unknown'}\n"
+                                      f"additive score from saved local costs: "
+                                      f"{imported.saved_additive_value if imported.saved_additive_value is not None else 'unknown'}\n"
+                                      f"bottleneck score from saved local costs: "
+                                      f"{imported.saved_bottleneck_value if imported.saved_bottleneck_value is not None else 'unknown'}\n"
+                                      f"length-weighted additive score from saved local costs: "
+                                      f"{imported.saved_length_weighted_additive_value if imported.saved_length_weighted_additive_value is not None else 'unknown'}\n"
+                                      "The displayed witnesses are the witnesses stored in the JSON. "
+                                      "Click 'Score imported φ' to recompute them under the selected cost and options.", )
         else:
             self.target_view.clear_result_overlays()
             self.score_label.setText("Imported φ: not scored for this cost")
-            self.details.setPlainText(
-                f"displayed mapping: imported φ from {imported.json_path.name}\n"
-                f"mapping: {len(imported.mapping)} source vertices\n"
-                f"selected cost: {self.current_cost_name}\n"
-                "Click 'Score imported φ' to evaluate this fixed mapping. "
-                "The optimizer will not run and the mapping will not change.",
-            )
+            self.details.setPlainText(f"displayed mapping: imported φ from {imported.json_path.name}\n"
+                                      f"mapping: {len(imported.mapping)} source vertices\n"
+                                      f"selected cost: {self.current_cost_name}\n"
+                                      "Click 'Score imported φ' to evaluate this fixed mapping. "
+                                      "The optimizer will not run and the mapping will not change.", )
 
         self.score_mapping_button.setEnabled(not self._busy)
         self.save_button.setEnabled(False)
@@ -1373,16 +1199,8 @@ class MainWindow(QMainWindow):
             if witness.ndim != 2 or witness.shape[1:] != (2,) or len(witness) < 2:
                 continue
             edges.append(
-                MatchedEdge(
-                    edge_id=int(raw["edge_id"]),
-                    source_u=int(raw["source_u"]),
-                    source_v=int(raw["source_v"]),
-                    target_u=int(raw["target_u"]),
-                    target_v=int(raw["target_v"]),
-                    cost=float(raw["cost"]),
-                    witness=np.ascontiguousarray(witness),
-                ),
-            )
+                MatchedEdge(edge_id=int(raw["edge_id"]), source_u=int(raw["source_u"]), source_v=int(raw["source_v"]), target_u=int(raw["target_u"]), target_v=int(raw["target_v"]),
+                            cost=float(raw["cost"]), witness=np.ascontiguousarray(witness), ), )
         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
 
     def _resolve_import_graph(self, metadata: Mapping[str, object], role: str, json_path: Path) -> Path:
@@ -1448,9 +1266,8 @@ class MainWindow(QMainWindow):
                     labels = [f"{objective} — score {float(solution.get('value', math.nan)):.12g}" for objective, solution in available]
                     preferred = str(self.aggregation_combo.currentData())
                     default_index = next((i for i, item in enumerate(available) if item[0] == preferred), 0)
-                    selected, accepted = QInputDialog.getItem(
-                        self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels, default_index, False,
-                    )
+                    selected, accepted = QInputDialog.getItem(self, "Choose mapping", "The JSON contains two optimized mappings. Which φ should be imported?", labels,
+                                                              default_index, False, )
                     if not accepted:
                         return
                     chosen_objective, chosen_solution = available[labels.index(selected)]
@@ -1476,15 +1293,9 @@ class MainWindow(QMainWindow):
             saved_adaptive_max_points_per_source = int(candidate_config.get("adaptive_max_points_per_source", 8))
             saved_adaptive_min_separation = float(candidate_config.get("adaptive_min_separation", 1.0))
             normalized_source, loaded_target, swapped = load_matching_pair(self.repository, source_path, target_path, saved_mode)
-            matching_target = prepare_candidate_target(
-                normalized_source.graph,
-                loaded_target.graph,
-                candidate_mode=saved_mode,
-                rho=saved_rho,
-                subdivision_points=saved_subdivision_points,
-                adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
-                adaptive_min_separation=saved_adaptive_min_separation,
-            )
+            matching_target = prepare_candidate_target(normalized_source.graph, loaded_target.graph, candidate_mode=saved_mode, rho=saved_rho,
+                                                       subdivision_points=saved_subdivision_points, adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
+                                                       adaptive_min_separation=saved_adaptive_min_separation, )
 
             if swapped:
                 raise ValueError("The imported JSON identifies the denser graph as the source; this UI only supports sparse-to-dense mappings.")
@@ -1516,31 +1327,13 @@ class MainWindow(QMainWindow):
             complete_saved_edges = len(saved_edges) == len(normalized_source.graph.edges)
             saved_additive = sum(edge.cost for edge in saved_edges) if complete_saved_edges else None
             saved_bottleneck = max((edge.cost for edge in saved_edges), default=0.0) if complete_saved_edges else None
-            saved_length_weighted_additive = (
-                sum(normalized_source.graph.edge_by_id[edge.edge_id].length * edge.cost for edge in saved_edges)
-                if complete_saved_edges
-                else None
-            )
-            imported = ImportedMapping(
-                json_path=json_path,
-                source_path=source_path,
-                target_path=target_path,
-                source_graph=normalized_source.graph,
-                target_graph=matching_target,
-                candidate_mode=saved_mode,
-                subdivision_points=saved_subdivision_points,
-                adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
-                adaptive_min_separation=saved_adaptive_min_separation,
-                mapping=mapping,
-                saved_cost_name=saved_cost_name,
-                saved_cost_options=saved_cost_options,
-                saved_objective=chosen_objective,
-                saved_value=saved_value,
-                saved_edges=saved_edges,
-                saved_additive_value=saved_additive,
-                saved_bottleneck_value=saved_bottleneck,
-                saved_length_weighted_additive_value=saved_length_weighted_additive,
-            )
+            saved_length_weighted_additive = (sum(normalized_source.graph.edge_by_id[edge.edge_id].length * edge.cost for edge in saved_edges) if complete_saved_edges else None)
+            imported = ImportedMapping(json_path=json_path, source_path=source_path, target_path=target_path, source_graph=normalized_source.graph, target_graph=matching_target,
+                                       candidate_mode=saved_mode, subdivision_points=saved_subdivision_points, adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
+                                       adaptive_min_separation=saved_adaptive_min_separation, mapping=mapping, saved_cost_name=saved_cost_name,
+                                       saved_cost_options=saved_cost_options, saved_objective=chosen_objective, saved_value=saved_value, saved_edges=saved_edges,
+                                       saved_additive_value=saved_additive, saved_bottleneck_value=saved_bottleneck,
+                                       saved_length_weighted_additive_value=saved_length_weighted_additive, )
             self._imported_mapping = imported
 
             self.candidate_rho.setValue(saved_rho)
@@ -1582,22 +1375,11 @@ class MainWindow(QMainWindow):
         self._active_token = token
         self._pending_run = None
         self._set_busy(True)
-        worker = MappingScoreWorker(
-            self.repository,
-            self.sessions,
-            paths[0],
-            paths[1],
-            candidate_rho=self.candidate_rho.value(),
-            top_k=self.top_k.value(),
-            candidate_mode=self.current_candidate_mode,
-            subdivision_points=self.subdivision_points.value(),
-            adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(),
-            adaptive_min_separation=self.adaptive_min_separation.value(),
-            mapping=imported.mapping,
-            cost_name=self.current_cost_name,
-            cost_options=self.cost_options.options_for(self.current_cost_name),
-            cancellation_token=token,
-        )
+        worker = MappingScoreWorker(self.repository, self.sessions, paths[0], paths[1], candidate_rho=self.candidate_rho.value(), top_k=self.top_k.value(),
+                                    candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
+                                    adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(),
+                                    mapping=imported.mapping, cost_name=self.current_cost_name, cost_options=self.cost_options.options_for(self.current_cost_name),
+                                    cancellation_token=token, )
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._mapping_score_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -1611,19 +1393,9 @@ class MainWindow(QMainWindow):
             return
 
         options = json.dumps(dict(raw_outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
-        key = (
-            str(raw_outcome.source_path.resolve()),
-            str(raw_outcome.target_path.resolve()),
-            float(self.candidate_rho.value()),
-            int(self.top_k.value()),
-            raw_outcome.candidate_mode.value,
-            int(raw_outcome.subdivision_points),
-            int(raw_outcome.adaptive_max_points_per_source),
-            float(raw_outcome.adaptive_min_separation),
-            raw_outcome.cost_name,
-            options,
-            tuple(sorted((int(source), int(target)) for source, target in raw_outcome.mapping.items())),
-        )
+        key = (str(raw_outcome.source_path.resolve()), str(raw_outcome.target_path.resolve()), float(self.candidate_rho.value()), int(self.top_k.value()),
+               raw_outcome.candidate_mode.value, int(raw_outcome.subdivision_points), int(raw_outcome.adaptive_max_points_per_source), float(raw_outcome.adaptive_min_separation),
+               raw_outcome.cost_name, options, tuple(sorted((int(source), int(target)) for source, target in raw_outcome.mapping.items())),)
         self._mapping_scores[key] = raw_outcome
         if self._display_mode == "imported":
             self._display_imported_mapping()

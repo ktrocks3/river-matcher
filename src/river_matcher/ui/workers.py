@@ -219,28 +219,11 @@ def _canonical_options(options: Mapping[str, object]) -> str:
 class PairSession:
     """Reusable matcher and result cache for one graph pair and candidate configuration."""
 
-    def __init__(
-        self,
-        source: LoadedGraph,
-        target: LoadedGraph,
-        *,
-        candidate_rho: float,
-        top_k: int,
-        candidate_mode: CandidateMode | str,
-        subdivision_points: int,
-        adaptive_max_points_per_source: int,
-        adaptive_min_separation: float,
-    ) -> None:
+    def __init__(self, source: LoadedGraph, target: LoadedGraph, *, candidate_rho: float, top_k: int, candidate_mode: CandidateMode | str, subdivision_points: int,
+            adaptive_max_points_per_source: int, adaptive_min_separation: float, ) -> None:
         mode = CandidateMode(candidate_mode)
-        matching_target = prepare_candidate_target(
-            source.graph,
-            target.graph,
-            candidate_mode=mode,
-            rho=candidate_rho,
-            subdivision_points=subdivision_points,
-            adaptive_max_points_per_source=adaptive_max_points_per_source,
-            adaptive_min_separation=adaptive_min_separation,
-        )
+        matching_target = prepare_candidate_target(source.graph, target.graph, candidate_mode=mode, rho=candidate_rho, subdivision_points=subdivision_points,
+            adaptive_max_points_per_source=adaptive_max_points_per_source, adaptive_min_separation=adaptive_min_separation, )
         self.source = source
         self.target = LoadedGraph(target.key, matching_target)
         self.candidate_rho = candidate_rho
@@ -250,10 +233,8 @@ class PairSession:
         self.adaptive_max_points_per_source = int(adaptive_max_points_per_source)
         self.adaptive_min_separation = float(adaptive_min_separation)
         candidate_sets = (
-            compute_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k)
-            if mode is CandidateMode.TARGET_JUNCTIONS
-            else compute_vertex_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k)
-        )
+            compute_candidate_sets(source.graph, matching_target, rho=candidate_rho, top_k=top_k) if mode is CandidateMode.TARGET_JUNCTIONS else compute_vertex_candidate_sets(
+                source.graph, matching_target, rho=candidate_rho, top_k=top_k))
         self.matcher = RiverGraphMatcher(source.graph, matching_target, candidate_sets=candidate_sets)
         self._results: dict[CostKey, AggregationMatchResult] = {}
         self._mapping_evaluations: dict[MappingEvaluationKey, MappingEvaluation] = {}
@@ -263,9 +244,8 @@ class PairSession:
     def preflight(self) -> MatchingPreflight:
         return self.matcher.preflight
 
-    def match(
-        self, cost_name: str, options: Mapping[str, object], *, cancellation_token: CancellationToken, progress: Callable[[str], None] | None = None,
-    ) -> tuple[AggregationMatchResult, bool, float]:
+    def match(self, cost_name: str, options: Mapping[str, object], *, cancellation_token: CancellationToken, progress: Callable[[str], None] | None = None, ) -> tuple[
+        AggregationMatchResult, bool, float]:
         key = CostKey(cost_name, _canonical_options(options))
 
         with self._lock:
@@ -282,9 +262,8 @@ class PairSession:
             self._results[key] = result
             return result, False, elapsed
 
-    def evaluate_mapping(
-        self, mapping: Mapping[int, int], cost_name: str, options: Mapping[str, object], *, cancellation_token: CancellationToken, progress: Callable[[str], None] | None = None,
-    ) -> tuple[MappingEvaluation, bool, float]:
+    def evaluate_mapping(self, mapping: Mapping[int, int], cost_name: str, options: Mapping[str, object], *, cancellation_token: CancellationToken,
+            progress: Callable[[str], None] | None = None, ) -> tuple[MappingEvaluation, bool, float]:
         normalized_mapping = tuple(sorted((int(source), int(target)) for source, target in mapping.items()))
         key = MappingEvaluationKey(CostKey(cost_name, _canonical_options(options)), normalized_mapping)
 
@@ -311,29 +290,11 @@ class PairSessionStore:
         self._sessions: OrderedDict[PairKey, PairSession] = OrderedDict()
         self._lock = threading.RLock()
 
-    def get_or_create(
-        self,
-        source: LoadedGraph,
-        target: LoadedGraph,
-        *,
-        candidate_rho: float,
-        top_k: int,
-        candidate_mode: CandidateMode | str,
-        subdivision_points: int,
-        adaptive_max_points_per_source: int,
-        adaptive_min_separation: float,
-    ) -> PairSession:
+    def get_or_create(self, source: LoadedGraph, target: LoadedGraph, *, candidate_rho: float, top_k: int, candidate_mode: CandidateMode | str, subdivision_points: int,
+            adaptive_max_points_per_source: int, adaptive_min_separation: float, ) -> PairSession:
         mode = CandidateMode(candidate_mode)
-        key = PairKey(
-            source.key,
-            target.key,
-            float(candidate_rho),
-            int(top_k),
-            mode,
-            int(subdivision_points),
-            int(adaptive_max_points_per_source),
-            float(adaptive_min_separation),
-        )
+        key = PairKey(source.key, target.key, float(candidate_rho), int(top_k), mode, int(subdivision_points), int(adaptive_max_points_per_source),
+            float(adaptive_min_separation), )
 
         with self._lock:
             existing = self._sessions.get(key)
@@ -342,16 +303,8 @@ class PairSessionStore:
                 self._sessions.move_to_end(key)
                 return existing
 
-        session = PairSession(
-            source,
-            target,
-            candidate_rho=candidate_rho,
-            top_k=top_k,
-            candidate_mode=mode,
-            subdivision_points=subdivision_points,
-            adaptive_max_points_per_source=adaptive_max_points_per_source,
-            adaptive_min_separation=adaptive_min_separation,
-        )
+        session = PairSession(source, target, candidate_rho=candidate_rho, top_k=top_k, candidate_mode=mode, subdivision_points=subdivision_points,
+            adaptive_max_points_per_source=adaptive_max_points_per_source, adaptive_min_separation=adaptive_min_separation, )
 
         with self._lock:
             existing = self._sessions.get(key)
@@ -413,8 +366,7 @@ class PreviewWorker(QRunnable):
             second = self.repository.load(self.second_path)
             source, target, swapped = normalize_sparse_to_dense(first, second)
             self.signals.result.emit(
-                PreviewOutcome(request_id=self.request_id, source_path=source.key.path, target_path=target.key.path, source=source.graph, target=target.graph, swapped=swapped),
-            )
+                PreviewOutcome(request_id=self.request_id, source_path=source.key.path, target_path=target.key.path, source=source.graph, target=target.graph, swapped=swapped), )
         except Exception:
             self.signals.failed.emit(traceback.format_exc())
         finally:
@@ -422,21 +374,9 @@ class PreviewWorker(QRunnable):
 
 
 class PreflightWorker(QRunnable):
-    def __init__(
-        self,
-        repository: GraphRepository,
-        sessions: PairSessionStore,
-        source_path: Path,
-        target_path: Path,
-        *,
-        candidate_rho: float,
-        top_k: int,
-        candidate_mode: CandidateMode | str,
-        subdivision_points: int,
-        adaptive_max_points_per_source: int,
-        adaptive_min_separation: float,
-        cancellation_token: CancellationToken,
-    ) -> None:
+    def __init__(self, repository: GraphRepository, sessions: PairSessionStore, source_path: Path, target_path: Path, *, candidate_rho: float, top_k: int,
+            candidate_mode: CandidateMode | str, subdivision_points: int, adaptive_max_points_per_source: int, adaptive_min_separation: float,
+            cancellation_token: CancellationToken, ) -> None:
         super().__init__()
         self.repository = repository
         self.sessions = sessions
@@ -458,32 +398,13 @@ class PreflightWorker(QRunnable):
             self.signals.progress.emit("Preparing candidates and tree decomposition")
             source, target, _ = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
             self.cancellation_token.check()
-            session = self.sessions.get_or_create(
-                source,
-                target,
-                candidate_rho=self.candidate_rho,
-                top_k=self.top_k,
-                candidate_mode=self.candidate_mode,
-                subdivision_points=self.subdivision_points,
-                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation,
-            )
+            session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
+                subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
+                adaptive_min_separation=self.adaptive_min_separation, )
             self.cancellation_token.check()
-            self.signals.result.emit(
-                PreflightOutcome(
-                    source_path=source.key.path,
-                    target_path=target.key.path,
-                    source=session.source.graph,
-                    target=session.target.graph,
-                    candidate_rho=self.candidate_rho,
-                    top_k=self.top_k,
-                    candidate_mode=self.candidate_mode,
-                    subdivision_points=self.subdivision_points,
-                    adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                    adaptive_min_separation=self.adaptive_min_separation,
-                    preflight=session.preflight,
-                ),
-            )
+            self.signals.result.emit(PreflightOutcome(source_path=source.key.path, target_path=target.key.path, source=session.source.graph, target=session.target.graph,
+                candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode, subdivision_points=self.subdivision_points,
+                adaptive_max_points_per_source=self.adaptive_max_points_per_source, adaptive_min_separation=self.adaptive_min_separation, preflight=session.preflight, ), )
         except OperationCancelled as error:
             self.signals.cancelled.emit(str(error))
         except Exception:
@@ -493,22 +414,9 @@ class PreflightWorker(QRunnable):
 
 
 class MatchWorker(QRunnable):
-    def __init__(
-        self,
-        repository: GraphRepository,
-        sessions: PairSessionStore,
-        source_path: Path,
-        target_path: Path,
-        *,
-        candidate_rho: float,
-        top_k: int,
-        candidate_mode: CandidateMode | str,
-        subdivision_points: int,
-        adaptive_max_points_per_source: int,
-        adaptive_min_separation: float,
-        costs: Sequence[tuple[str, Mapping[str, object]]],
-        cancellation_token: CancellationToken,
-    ) -> None:
+    def __init__(self, repository: GraphRepository, sessions: PairSessionStore, source_path: Path, target_path: Path, *, candidate_rho: float, top_k: int,
+            candidate_mode: CandidateMode | str, subdivision_points: int, adaptive_max_points_per_source: int, adaptive_min_separation: float,
+            costs: Sequence[tuple[str, Mapping[str, object]]], cancellation_token: CancellationToken, ) -> None:
         super().__init__()
         self.repository = repository
         self.sessions = sessions
@@ -529,16 +437,9 @@ class MatchWorker(QRunnable):
         try:
             self.cancellation_token.check()
             source, target, swapped = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
-            session = self.sessions.get_or_create(
-                source,
-                target,
-                candidate_rho=self.candidate_rho,
-                top_k=self.top_k,
-                candidate_mode=self.candidate_mode,
-                subdivision_points=self.subdivision_points,
-                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation,
-            )
+            session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
+                subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
+                adaptive_min_separation=self.adaptive_min_separation, )
 
             for index, (cost_name, options) in enumerate(self.costs, start=1):
                 self.cancellation_token.check()
@@ -549,25 +450,10 @@ class MatchWorker(QRunnable):
 
                 result, from_cache, elapsed = session.match(cost_name, options, cancellation_token=self.cancellation_token, progress=progress)
                 self.signals.result.emit(
-                    RunOutcome(
-                        source_path=source.key.path,
-                        target_path=target.key.path,
-                        source=session.source.graph,
-                        target=session.target.graph,
-                        cost_name=cost_name,
-                        cost_options=dict(options),
-                        candidate_rho=self.candidate_rho,
-                        top_k=self.top_k,
-                        candidate_mode=self.candidate_mode,
-                        subdivision_points=self.subdivision_points,
-                        adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                        adaptive_min_separation=self.adaptive_min_separation,
-                        result=result,
-                        swapped=swapped,
-                        from_cache=from_cache,
-                        elapsed_seconds=elapsed,
-                    ),
-                )
+                    RunOutcome(source_path=source.key.path, target_path=target.key.path, source=session.source.graph, target=session.target.graph, cost_name=cost_name,
+                        cost_options=dict(options), candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
+                        subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
+                        adaptive_min_separation=self.adaptive_min_separation, result=result, swapped=swapped, from_cache=from_cache, elapsed_seconds=elapsed, ), )
         except OperationCancelled as error:
             self.signals.cancelled.emit(str(error))
         except Exception:
@@ -577,24 +463,9 @@ class MatchWorker(QRunnable):
 
 
 class MappingScoreWorker(QRunnable):
-    def __init__(
-        self,
-        repository: GraphRepository,
-        sessions: PairSessionStore,
-        source_path: Path,
-        target_path: Path,
-        *,
-        candidate_rho: float,
-        top_k: int,
-        candidate_mode: CandidateMode | str,
-        subdivision_points: int,
-        adaptive_max_points_per_source: int,
-        adaptive_min_separation: float,
-        mapping: Mapping[int, int],
-        cost_name: str,
-        cost_options: Mapping[str, object],
-        cancellation_token: CancellationToken,
-    ) -> None:
+    def __init__(self, repository: GraphRepository, sessions: PairSessionStore, source_path: Path, target_path: Path, *, candidate_rho: float, top_k: int,
+            candidate_mode: CandidateMode | str, subdivision_points: int, adaptive_max_points_per_source: int, adaptive_min_separation: float, mapping: Mapping[int, int],
+            cost_name: str, cost_options: Mapping[str, object], cancellation_token: CancellationToken, ) -> None:
         super().__init__()
         self.repository = repository
         self.sessions = sessions
@@ -617,41 +488,20 @@ class MappingScoreWorker(QRunnable):
         try:
             self.cancellation_token.check()
             source, target, _ = load_matching_pair(self.repository, self.source_path, self.target_path, self.candidate_mode)
-            session = self.sessions.get_or_create(
-                source,
-                target,
-                candidate_rho=self.candidate_rho,
-                top_k=self.top_k,
-                candidate_mode=self.candidate_mode,
-                subdivision_points=self.subdivision_points,
-                adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                adaptive_min_separation=self.adaptive_min_separation,
-            )
+            session = self.sessions.get_or_create(source, target, candidate_rho=self.candidate_rho, top_k=self.top_k, candidate_mode=self.candidate_mode,
+                subdivision_points=self.subdivision_points, adaptive_max_points_per_source=self.adaptive_max_points_per_source,
+                adaptive_min_separation=self.adaptive_min_separation, )
 
             def progress(message: str) -> None:
                 self.signals.progress.emit(message)
 
-            evaluation, from_cache, elapsed = session.evaluate_mapping(
-                self.mapping, self.cost_name, self.cost_options, cancellation_token=self.cancellation_token, progress=progress,
-            )
+            evaluation, from_cache, elapsed = session.evaluate_mapping(self.mapping, self.cost_name, self.cost_options, cancellation_token=self.cancellation_token,
+                progress=progress, )
             self.signals.result.emit(
-                MappingScoreOutcome(
-                    source_path=source.key.path,
-                    target_path=target.key.path,
-                    source=session.source.graph,
-                    target=session.target.graph,
-                    cost_name=self.cost_name,
-                    cost_options=self.cost_options,
-                    candidate_mode=self.candidate_mode,
-                    subdivision_points=self.subdivision_points,
-                    adaptive_max_points_per_source=self.adaptive_max_points_per_source,
-                    adaptive_min_separation=self.adaptive_min_separation,
-                    mapping=self.mapping,
-                    evaluation=evaluation,
-                    from_cache=from_cache,
-                    elapsed_seconds=elapsed,
-                ),
-            )
+                MappingScoreOutcome(source_path=source.key.path, target_path=target.key.path, source=session.source.graph, target=session.target.graph, cost_name=self.cost_name,
+                    cost_options=self.cost_options, candidate_mode=self.candidate_mode, subdivision_points=self.subdivision_points,
+                    adaptive_max_points_per_source=self.adaptive_max_points_per_source, adaptive_min_separation=self.adaptive_min_separation, mapping=self.mapping,
+                    evaluation=evaluation, from_cache=from_cache, elapsed_seconds=elapsed, ), )
         except OperationCancelled as error:
             self.signals.cancelled.emit(str(error))
         except Exception:
