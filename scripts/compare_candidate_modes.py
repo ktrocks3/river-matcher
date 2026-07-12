@@ -18,24 +18,16 @@ SRC: Final[Path] = ROOT / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from river_matcher.candidates import (CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target)
+from river_matcher.candidates import (CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target, merge_candidate_sets, )
 from river_matcher.decomposition import (SourceDecomposition, build_source_decomposition)
 from river_matcher.dynamic_programming import Objective
 from river_matcher.matcher import RiverGraphMatcher
 from river_matcher.models import JunctionGraph
 from river_matcher.preprocessing import (load_embedded_graph, load_junction_graph)
 
-THESIS_PAIRS: Final[tuple[tuple[str, str, float], ...]] = (
-    ("1998e5", "2014e3", 16.0),
-    ("1998e3", "1955e3", 13.0),
-    ("1998e5", "1955e3", 13.0),
-    ("1998e5", "1955e5", 13.0),
-    ("2014e3", "1955e3", 12.0),
-    ("2014e5", "1955e5", 12.0),
-    ("2014e5", "1998e5", 11.0),
-    ("2014e3", "1998e3", 11.0),
-    ("2014e5", "1998e3", 10.0),
-)
+THESIS_PAIRS: Final[tuple[tuple[str, str, float], ...]] = (("1998e5", "2014e3", 16.0), ("1998e3", "1955e3", 13.0), ("1998e5", "1955e3", 13.0), ("1998e5", "1955e5", 13.0),
+                                                           ("2014e3", "1955e3", 12.0), ("2014e5", "1955e5", 12.0), ("2014e5", "1998e5", 11.0), ("2014e3", "1998e3", 11.0),
+                                                           ("2014e5", "1998e3", 10.0),)
 
 COST_NAME: Final[str] = "discrete_frechet_distance"
 COST_OPTIONS: Final[dict[str, object]] = {"rho": 10.0, "edge_samples": 12, "curve_samples": 64}
@@ -156,10 +148,33 @@ def build_target(source: JunctionGraph, target_path: Path, mode: CandidateMode, 
                                     adaptive_min_separation=adaptive_min_separation)
 
 
-def candidate_sets_for_mode(source: JunctionGraph, target: JunctionGraph, mode: CandidateMode, *, rho: float, top_k: int) -> dict[int, list[int]]:
+def candidate_sets_for_mode(source: JunctionGraph, junction_target: JunctionGraph, matching_target: JunctionGraph, mode: CandidateMode, *, rho: float, top_k: int,
+                            adaptive_max_points: int, ) -> dict[int, list[int]]:
+    baseline = compute_candidate_sets(source, junction_target, rho=rho, top_k=top_k, )
+
     if mode is CandidateMode.TARGET_JUNCTIONS:
-        return compute_candidate_sets(source, target, rho=rho, top_k=top_k)
-    return compute_vertex_candidate_sets(source, target, rho=rho, top_k=top_k)
+        return baseline
+
+    matching_vertices = set(matching_target.vertices)
+    junction_vertices = set(junction_target.vertices)
+
+    missing = sorted(junction_vertices - matching_vertices)
+    if missing:
+        raise ValueError(f"Matching target is missing baseline junction vertices: {missing}")
+
+    additional_vertices = matching_vertices - junction_vertices
+
+    additional_limit = (adaptive_max_points if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS else max(1, len(additional_vertices)))
+
+    additions = compute_vertex_candidate_sets(source, matching_target, rho=rho, top_k=additional_limit, eligible_vertices=additional_vertices, )
+
+    candidate_sets = merge_candidate_sets(baseline, additions)
+
+    unknown = sorted({candidate for domain in candidate_sets.values() for candidate in domain} - matching_vertices)
+    if unknown:
+        raise ValueError(f"Candidate IDs are not vertices of the matching target: {unknown}")
+
+    return candidate_sets
 
 
 def prepare_problem(source: JunctionGraph, target_path: Path, decomposition: SourceDecomposition, mode: CandidateMode, *, rho: float, top_k: int, subdivision_points: int,
@@ -167,7 +182,8 @@ def prepare_problem(source: JunctionGraph, target_path: Path, decomposition: Sou
                     original_cache: dict[Path, JunctionGraph]) -> PreparedProblem:
     target = build_target(source, target_path, mode, rho=rho, subdivision_points=subdivision_points, adaptive_max_points=adaptive_max_points,
                           adaptive_min_separation=adaptive_min_separation, junction_cache=junction_cache, original_cache=original_cache)
-    candidate_sets = candidate_sets_for_mode(source, target, mode, rho=rho, top_k=top_k)
+    junction_target = junction_cache[target_path]
+    candidate_sets = candidate_sets_for_mode(source, junction_target, target, mode, rho=rho, top_k=top_k, adaptive_max_points=adaptive_max_points, )
     matcher = RiverGraphMatcher(source, target, candidate_sets=candidate_sets, decomposition=decomposition)
     return PreparedProblem(target, matcher)
 
