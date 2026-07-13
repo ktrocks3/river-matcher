@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QLocale, QSettings, Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMessageBox,
-                               QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget, QVBoxLayout, QWidget, )
+                               QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget, QVBoxLayout, QWidget)
 
 from river_matcher.cancellation import CancellationToken
 from river_matcher.candidates import CandidateMode, prepare_candidate_target
@@ -20,12 +20,14 @@ from river_matcher.matcher import AggregationMatchResult, MatchedEdge, MatchSolu
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
 from river_matcher.ui.overlay_views import LayeredGraph3DView, Overlay2DView
+from river_matcher.ui.settings import DominanceMode
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
 from river_matcher.ui.workers import (CatalogOutcome, CatalogWorker, GraphInfo, GraphRepository, MappingScoreOutcome, MappingScoreWorker, MatchWorker, PairSessionStore,
-                                      PreflightOutcome, PreflightWorker, PreviewOutcome, PreviewWorker, RunOutcome, load_matching_pair, )
+                                      PreflightOutcome, PreflightWorker, PreviewOutcome, PreviewWorker, RunOutcome, load_matching_pair)
 
 _WARN_STATE_LIMIT = 2_000_000
 _BLOCK_STATE_LIMIT = 10_000_000
+type OutcomeKey = tuple[str, str, float, int, str, int, int, float, str, bool, str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,13 +60,14 @@ class ImportedMapping:
 @dataclass(frozen=True, slots=True)
 class PendingRun:
     paths: tuple[Path, Path]
-    costs: tuple[tuple[str, Mapping[str, object]], ...]
+    costs: tuple[tuple[str, Mapping[str, object], bool], ...]
     candidate_rho: float
     top_k: int
     candidate_mode: CandidateMode
     subdivision_points: int
     adaptive_max_points_per_source: int
     adaptive_min_separation: float
+    dominance_mode: DominanceMode
 
 
 def _find_graph_directory() -> Path:
@@ -103,13 +106,16 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
     decomposition = result.decomposition
     dp = result.dp_statistics
     compatibility = result.compatibility_statistics
+    dominance = result.dominance_pruning
+    dominance_estimate = None if result.dominance_preflight is None else result.dominance_preflight.estimated_state_upper_bound
 
     return {"schema_version": 2,
             "source": {"path": str(outcome.source_path), "name": outcome.source.name, "vertices": len(outcome.source.vertices), "edges": len(outcome.source.edges)},
             "target": {"path": str(outcome.target_path), "name": outcome.target.name, "vertices": len(outcome.target.vertices), "edges": len(outcome.target.edges)},
             "cost": {"name": outcome.cost_name, "options": dict(outcome.cost_options)},
             "candidate_parameters": {"rho": outcome.candidate_rho, "top_k": outcome.top_k, "mode": outcome.candidate_mode.value, "subdivision_points": outcome.subdivision_points,
-                                     "adaptive_max_points_per_source": outcome.adaptive_max_points_per_source, "adaptive_min_separation": outcome.adaptive_min_separation, },
+                                     "adaptive_max_points_per_source": outcome.adaptive_max_points_per_source, "adaptive_min_separation": outcome.adaptive_min_separation,
+                                     "dominance_mode": outcome.dominance_mode.value, "dominance_enabled": outcome.dominance_enabled, },
             "candidate_statistics": {"source_vertices": candidates.source_vertices, "empty_domains": candidates.empty_domains, "total_candidates": candidates.total_candidates,
                                      "minimum_candidates": candidates.minimum_candidates, "maximum_candidates": candidates.maximum_candidates, },
             "effective_candidate_statistics": {"source_vertices": effective.source_vertices, "empty_domains": effective.empty_domains,
@@ -118,6 +124,13 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
             "candidate_sets": {str(vertex): list(values) for vertex, values in result.candidate_sets.items()},
             "effective_candidate_sets": {str(vertex): list(values) for vertex, values in (result.effective_candidate_sets or result.candidate_sets).items()},
             "preflight": _preflight_payload(result.preflight), "effective_preflight": _preflight_payload(result.effective_preflight),
+            "dominance_preflight": _preflight_payload(result.dominance_preflight),
+            "dominance_pruning": None if dominance is None else {"candidates_before": dominance.candidates_before, "candidates_after": dominance.candidates_after,
+                                                                 "candidates_removed": dominance.candidates_removed, "elapsed_seconds": dominance.elapsed_seconds,
+                                                                 "iterations": dominance.iterations, "dominance_comparisons": dominance.dominance_comparisons,
+                                                                 "local_cost_requests": dominance.local_cost_requests, "post_dominance_state_estimate": dominance_estimate,
+                                                                 "comparison_limit_reached": dominance.comparison_limit_reached, },
+            "state_limits": {"before_optimization_reached": result.state_limit_reached, "after_dominance_reached": result.dominance_state_limit_reached, },
             "compatibility": None if compatibility is None else {"initial_candidates": compatibility.initial_candidates, "remaining_candidates": compatibility.remaining_candidates,
                                                                  "removed_candidates": compatibility.removed_candidates, "revised_arcs": compatibility.revised_arcs,
                                                                  "empty_domains": compatibility.empty_domains, },
@@ -135,7 +148,9 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
                                                           "witness_adjacency_seconds": result.timing.witness_adjacency_seconds,
                                                           "witness_adjacency_builds": result.timing.witness_adjacency_builds,
                                                           "witness_dijkstra_seconds": result.timing.witness_dijkstra_seconds,
-                                                          "witness_dijkstra_runs": result.timing.witness_dijkstra_runs, "feasibility_reused": result.timing.feasibility_reused, },
+                                                          "witness_dijkstra_runs": result.timing.witness_dijkstra_runs,
+                                                          "dominance_pruning_seconds": result.timing.dominance_pruning_seconds,
+                                                          "feasibility_reused": result.timing.feasibility_reused, },
             "solutions": {Objective.ADDITIVE.value: _solution_payload(result.additive), Objective.BOTTLENECK.value: _solution_payload(result.bottleneck),
                           Objective.LENGTH_WEIGHTED_ADDITIVE.value: _solution_payload(result.length_weighted_additive), }, }
 
@@ -153,7 +168,7 @@ class MainWindow(QMainWindow):
         self._preview_request_id = 0
         self._graph_catalog: dict[Path, GraphInfo] = {}
         self._rebuilding_targets = False
-        self._outcomes: dict[tuple[str, str, float, int, str, int, int, float, str, str], RunOutcome] = {}
+        self._outcomes: dict[OutcomeKey, RunOutcome] = {}
         self._current_outcome: RunOutcome | None = None
         self._imported_mapping: ImportedMapping | None = None
         self._mapping_scores: dict[tuple[str, str, float, int, str, int, int, float, str, str, tuple[tuple[int, int], ...]], MappingScoreOutcome] = {}
@@ -213,6 +228,11 @@ class MainWindow(QMainWindow):
         self.adaptive_min_separation.setDecimals(3)
         self.adaptive_min_separation.setValue(float(self.settings.value("adaptive_min_separation", 1.0)))
 
+        self.dominance_mode_combo = QComboBox()
+        for mode in DominanceMode:
+            self.dominance_mode_combo.addItem(mode.display_name, mode.value)
+        self.dominance_mode_combo.setToolTip("Exact cost-aware pruning. Auto enables it for discrete Fréchet, where benchmarks showed substantial state reduction.")
+
         self.cost_options = CostOptionsWidget()
         self.run_button = QPushButton("Run selected cost")
         self.compute_all_button = QPushButton("Compute all costs")
@@ -252,27 +272,34 @@ class MainWindow(QMainWindow):
     def current_candidate_mode(self) -> CandidateMode:
         return CandidateMode(str(self.candidate_mode_combo.currentData() or CandidateMode.TARGET_JUNCTIONS.value))
 
+    @property
+    def current_dominance_mode(self) -> DominanceMode:
+        return DominanceMode(str(self.dominance_mode_combo.currentData() or DominanceMode.AUTO.value))
+
     @staticmethod
-    def _outcome_key(outcome: RunOutcome) -> tuple[str, str, float, int, str, int, int, float, str, str]:
+    def _outcome_key(outcome: RunOutcome) -> OutcomeKey:
         options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
         return (str(outcome.source_path.resolve()), str(outcome.target_path.resolve()), float(outcome.candidate_rho), int(outcome.top_k), outcome.candidate_mode.value,
-                int(outcome.subdivision_points), int(outcome.adaptive_max_points_per_source), float(outcome.adaptive_min_separation), outcome.cost_name, options,)
+                int(outcome.subdivision_points), int(outcome.adaptive_max_points_per_source), float(outcome.adaptive_min_separation), outcome.dominance_mode.value,
+                bool(outcome.dominance_enabled), outcome.cost_name, options,)
 
-    def _current_key(self, cost_name: str) -> tuple[str, str, float, int, str, int, int, float, str, str] | None:
+    def _current_key(self, cost_name: str) -> OutcomeKey | None:
         paths = self._selected_paths()
 
         if paths is None:
             return None
 
         options = json.dumps(self.cost_options.options_for(cost_name), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        dominance_mode = self.current_dominance_mode
         return (str(paths[0].resolve()), str(paths[1].resolve()), float(self.candidate_rho.value()), int(self.top_k.value()), self.current_candidate_mode.value,
-                int(self.subdivision_points.value()), int(self.adaptive_max_points_per_source.value()), float(self.adaptive_min_separation.value()), cost_name, options,)
+                int(self.subdivision_points.value()), int(self.adaptive_max_points_per_source.value()), float(self.adaptive_min_separation.value()), dominance_mode.value,
+                dominance_mode.enabled_for(cost_name), cost_name, options,)
 
     @property
     def _display_mode(self) -> str:
         return str(self.mapping_mode_combo.currentData() or "computed")
 
-    def _mapping_score_key(self, mapping: Mapping[int, int], cost_name: str | None = None, ) -> tuple[str, str, float, int, str, int, int, float, str, str, tuple[
+    def _mapping_score_key(self, mapping: Mapping[int, int], cost_name: str | None = None) -> tuple[str, str, float, int, str, int, int, float, str, str, tuple[
         tuple[int, int], ...]] | None:
         paths = self._selected_paths()
 
@@ -331,6 +358,8 @@ class MainWindow(QMainWindow):
         parameters.addWidget(self.adaptive_min_separation, 3, 3)
         parameters.addWidget(QLabel("Adaptive maximum points per source"), 4, 0)
         parameters.addWidget(self.adaptive_max_points_per_source, 4, 1)
+        parameters.addWidget(QLabel("Dominance pruning"), 4, 2)
+        parameters.addWidget(self.dominance_mode_combo, 4, 3)
         parameters.addWidget(self.cost_options, 5, 0, 1, 4)
         parameters.addWidget(QLabel("Displayed mapping"), 6, 0)
         parameters.addWidget(self.mapping_mode_combo, 6, 1)
@@ -387,6 +416,7 @@ class MainWindow(QMainWindow):
         self.subdivision_points.valueChanged.connect(self._candidate_parameters_changed)
         self.adaptive_max_points_per_source.valueChanged.connect(self._candidate_parameters_changed)
         self.adaptive_min_separation.valueChanged.connect(self._candidate_parameters_changed)
+        self.dominance_mode_combo.currentIndexChanged.connect(self._dominance_mode_changed)
         self.mapping_mode_combo.currentIndexChanged.connect(self._mapping_mode_changed)
         self.cost_options.optionsChanged.connect(self._cost_options_changed)
         self.run_button.clicked.connect(self._run_selected)
@@ -451,7 +481,7 @@ class MainWindow(QMainWindow):
             previous = Path(str(self.source_combo.currentData())).resolve()
 
         graphs = sorted((graph for graph in self._graph_catalog.values() if any(other.vertices > graph.vertices for other in self._graph_catalog.values())),
-                        key=lambda graph: (graph.vertices, graph.path.name.lower()), )
+                        key=lambda graph: (graph.vertices, graph.path.name.lower()))
         self.source_combo.blockSignals(True)
         self.source_combo.clear()
 
@@ -486,6 +516,7 @@ class MainWindow(QMainWindow):
         self._select_data(self.cost_combo, str(self.settings.value("cost", "relative_length_error")))
         self._select_data(self.aggregation_combo, str(self.settings.value("aggregation", Objective.ADDITIVE.value)))
         self._select_data(self.candidate_mode_combo, str(self.settings.value("candidate_mode", CandidateMode.TARGET_JUNCTIONS.value)))
+        self._select_data(self.dominance_mode_combo, str(self.settings.value("dominance_mode", DominanceMode.AUTO.value)))
         self._update_candidate_controls()
 
     def _source_changed(self) -> None:
@@ -522,6 +553,24 @@ class MainWindow(QMainWindow):
         self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
         self._pair_changed()
+
+    def _dominance_mode_changed(self) -> None:
+        self.settings.setValue("dominance_mode", self.current_dominance_mode.value)
+
+        if self._display_mode == "imported":
+            return
+
+        key = self._current_key(self.current_cost_name)
+        cached = None if key is None else self._outcomes.get(key)
+        if cached is not None:
+            self._display_outcome(cached)
+            return
+
+        self._current_outcome = None
+        self.save_button.setEnabled(False)
+        self._clear_solution_views()
+        self.score_label.setText("Score: —")
+        self.status_label.setText("This dominance setting has not been computed for the current cost and parameters.")
 
     def _update_candidate_controls(self) -> None:
         mode = self.current_candidate_mode
@@ -803,10 +852,11 @@ class MainWindow(QMainWindow):
 
         token = CancellationToken()
         self._active_token = token
-        pending = PendingRun(paths=(paths[0].resolve(), paths[1].resolve()), costs=tuple((name, dict(options)) for name, options in costs),
+        dominance_mode = self.current_dominance_mode
+        pending = PendingRun(paths=(paths[0].resolve(), paths[1].resolve()), costs=tuple((name, dict(options), dominance_mode.enabled_for(name)) for name, options in costs),
                              candidate_rho=float(self.candidate_rho.value()), top_k=int(self.top_k.value()), candidate_mode=self.current_candidate_mode,
                              subdivision_points=int(self.subdivision_points.value()), adaptive_max_points_per_source=int(self.adaptive_max_points_per_source.value()),
-                             adaptive_min_separation=float(self.adaptive_min_separation.value()), )
+                             adaptive_min_separation=float(self.adaptive_min_separation.value()), dominance_mode=dominance_mode)
         self._pending_run = pending
         self._set_busy(True)
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
@@ -815,11 +865,12 @@ class MainWindow(QMainWindow):
         self.settings.setValue("subdivision_points", self.subdivision_points.value())
         self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
+        self.settings.setValue("dominance_mode", dominance_mode.value)
 
         worker = PreflightWorker(self.repository, self.sessions, pending.paths[0], pending.paths[1], candidate_rho=pending.candidate_rho, top_k=pending.top_k,
                                  candidate_mode=pending.candidate_mode, subdivision_points=pending.subdivision_points,
                                  adaptive_max_points_per_source=pending.adaptive_max_points_per_source, adaptive_min_separation=pending.adaptive_min_separation,
-                                 cancellation_token=token, )
+                                 dominance_mode=pending.dominance_mode, cancellation_token=token)
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._preflight_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -838,20 +889,22 @@ class MainWindow(QMainWindow):
 
         if preflight.empty_domains:
             QMessageBox.information(self, "No complete candidate mapping",
-                                    f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost.", )
+                                    f"{preflight.empty_domains} source vertices have no candidates. Increase Candidate rho or Top-k before running a cost.")
             self._finish_job("Preflight stopped: empty candidate domains")
             return
 
-        if preflight.estimated_state_upper_bound > _BLOCK_STATE_LIMIT:
+        any_dominance_enabled = any(enabled for _, _, enabled in self._pending_run.costs)
+
+        if preflight.estimated_state_upper_bound > _BLOCK_STATE_LIMIT and not any_dominance_enabled:
             QMessageBox.warning(self, "Run blocked", f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states.\n\n"
-                                                     f"The default safety limit is {_BLOCK_STATE_LIMIT:,}. Reduce Candidate rho or Top-k.", )
-            self._finish_job("Preflight blocked an oversized exact-DP run")
+                                                     f"The default safety limit is {_BLOCK_STATE_LIMIT:,}. Reduce Candidate rho or Top-k.")
+            self._finish_job("State limit exceeded before optimization")
             return
 
-        if preflight.estimated_state_upper_bound > _WARN_STATE_LIMIT:
+        if preflight.estimated_state_upper_bound > _WARN_STATE_LIMIT and not any_dominance_enabled:
             answer = QMessageBox.question(self, "Large exact-DP run", f"The current parameters estimate {preflight.estimated_state_upper_bound:,} bag states "
                                                                       f"and a largest bag product of {preflight.largest_candidate_product:,}.\n\nContinue?",
-                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No, )
+                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
 
             if answer != QMessageBox.StandardButton.Yes:
                 self._finish_job("Run cancelled after preflight warning")
@@ -864,7 +917,7 @@ class MainWindow(QMainWindow):
         return (outcome.source_path.resolve() == pending.paths[0] and outcome.target_path.resolve() == pending.paths[1] and float(
             outcome.candidate_rho) == pending.candidate_rho and int(outcome.top_k) == pending.top_k and outcome.candidate_mode is pending.candidate_mode and int(
             outcome.subdivision_points) == pending.subdivision_points and int(outcome.adaptive_max_points_per_source) == pending.adaptive_max_points_per_source and float(
-            outcome.adaptive_min_separation) == pending.adaptive_min_separation)
+            outcome.adaptive_min_separation) == pending.adaptive_min_separation and outcome.dominance_mode is pending.dominance_mode)
 
     @staticmethod
     def _format_preflight(preflight: MatchingPreflight) -> str:
@@ -885,7 +938,7 @@ class MainWindow(QMainWindow):
         worker = MatchWorker(self.repository, self.sessions, pending.paths[0], pending.paths[1], candidate_rho=pending.candidate_rho, top_k=pending.top_k,
                              candidate_mode=pending.candidate_mode, subdivision_points=pending.subdivision_points,
                              adaptive_max_points_per_source=pending.adaptive_max_points_per_source, adaptive_min_separation=pending.adaptive_min_separation, costs=pending.costs,
-                             cancellation_token=self._active_token, )
+                             dominance_mode=pending.dominance_mode, state_limit=_BLOCK_STATE_LIMIT, cancellation_token=self._active_token)
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._match_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -917,15 +970,27 @@ class MainWindow(QMainWindow):
         if outcome.cost_name == self.current_cost_name and self._display_mode == "computed":
             self._display_outcome(outcome)
 
-        timing = "cached" if outcome.from_cache else f"{outcome.elapsed_seconds:.3f} s"
-        self.status_label.setText(f"{outcome.cost_name.replace('_', ' ')} ready ({timing})")
+        if outcome.result.dominance_state_limit_reached:
+            self.status_label.setText(f"{outcome.cost_name.replace('_', ' ')}: State limit still exceeded after dominance pruning")
+        elif outcome.result.state_limit_reached:
+            self.status_label.setText(f"{outcome.cost_name.replace('_', ' ')}: State limit exceeded before optimization")
+        else:
+            timing = "cached" if outcome.from_cache else f"{outcome.elapsed_seconds:.3f} s"
+            self.status_label.setText(f"{outcome.cost_name.replace('_', ' ')} ready ({timing})")
 
     @staticmethod
     def _run_matches_pending(outcome: RunOutcome, pending: PendingRun) -> bool:
+        requested = next(((options, enabled) for name, options, enabled in pending.costs if name == outcome.cost_name), None)
+        if requested is None:
+            return False
+        options, enabled = requested
+        expected_options = json.dumps(dict(options), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        actual_options = json.dumps(dict(outcome.cost_options), sort_keys=True, separators=(",", ":"), allow_nan=False)
         return (outcome.source_path.resolve() == pending.paths[0] and outcome.target_path.resolve() == pending.paths[1] and float(
             outcome.candidate_rho) == pending.candidate_rho and int(outcome.top_k) == pending.top_k and outcome.candidate_mode is pending.candidate_mode and int(
             outcome.subdivision_points) == pending.subdivision_points and int(outcome.adaptive_max_points_per_source) == pending.adaptive_max_points_per_source and float(
-            outcome.adaptive_min_separation) == pending.adaptive_min_separation)
+            outcome.adaptive_min_separation) == pending.adaptive_min_separation and outcome.dominance_mode is pending.dominance_mode and outcome.dominance_enabled is enabled and
+                actual_options == expected_options)
 
     def _worker_failed(self, traceback_text: str) -> None:
         self.details.setPlainText(traceback_text)
@@ -973,6 +1038,7 @@ class MainWindow(QMainWindow):
         self.candidate_rho.setEnabled(not busy)
         self.top_k.setEnabled(not busy)
         self.candidate_mode_combo.setEnabled(not busy)
+        self.dominance_mode_combo.setEnabled(not busy)
         self.subdivision_points.setEnabled(not busy and self.current_candidate_mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION)
         self.adaptive_max_points_per_source.setEnabled(not busy and self.current_candidate_mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
         self.adaptive_min_separation.setEnabled(not busy and self.current_candidate_mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS)
@@ -1004,6 +1070,30 @@ class MainWindow(QMainWindow):
                 f"guided adjacency {timing.witness_adjacency_seconds:.3f} s / {timing.witness_adjacency_builds:,} builds; "
                 f"Dijkstra {timing.witness_dijkstra_seconds:.3f} s / {timing.witness_dijkstra_runs:,} runs")
 
+    @staticmethod
+    def _format_dominance(outcome: RunOutcome) -> str:
+        mode = outcome.dominance_mode.value
+        if not outcome.dominance_enabled:
+            return f"\ndominance pruning: disabled ({mode})"
+
+        result = outcome.result
+        pruning = result.dominance_pruning
+        if pruning is None:
+            return f"\ndominance pruning: enabled ({mode})"
+
+        preflight = result.dominance_preflight
+        estimate = "unknown" if preflight is None else f"{preflight.estimated_state_upper_bound:,}"
+        limit_status = "\npost-dominance state limit: exceeded" if result.dominance_state_limit_reached else ""
+        comparison_status = "\ndominance comparison limit: reached" if pruning.comparison_limit_reached else ""
+        return (f"\ndominance pruning: enabled ({mode})\n"
+                f"candidates: {pruning.candidates_before:,} -> {pruning.candidates_after:,} (-{pruning.candidates_removed:,})\n"
+                f"dominance time: {pruning.elapsed_seconds:.3f} s\n"
+                f"dominance iterations: {pruning.iterations:,}\n"
+                f"dominance comparisons: {pruning.dominance_comparisons:,}\n"
+                f"dominance local-cost requests: {pruning.local_cost_requests:,}\n"
+                f"post-dominance state estimate: {estimate}"
+                f"{limit_status}{comparison_status}")
+
     def _display_outcome(self, outcome: RunOutcome) -> None:
         self._current_outcome = outcome
         result = outcome.result
@@ -1017,6 +1107,30 @@ class MainWindow(QMainWindow):
 
         if solution is None:
             self._clear_solution_views()
+            if result.dominance_state_limit_reached:
+                self.score_label.setText("Score: skipped")
+                self.details.setPlainText(f"cost: {outcome.cost_name}\n"
+                                          f"aggregation: {self.aggregation_combo.currentData()}\n"
+                                          "State limit still exceeded after dominance pruning. Optimization was not started.\n"
+                                          f"arc-consistency removed: {pruning} candidates\n"
+                                          f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
+                                          f"effective state estimate before dominance: {estimate:,}"
+                                          f"{self._format_dominance(outcome)}"
+                                          f"{self._format_timing(result)}")
+                self.save_button.setEnabled(True)
+                return
+            if result.state_limit_reached:
+                self.score_label.setText("Score: skipped")
+                self.details.setPlainText(f"cost: {outcome.cost_name}\n"
+                                          f"aggregation: {self.aggregation_combo.currentData()}\n"
+                                          "State limit exceeded before optimization. Optimization was not started.\n"
+                                          f"arc-consistency removed: {pruning} candidates\n"
+                                          f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
+                                          f"effective state estimate: {estimate:,}"
+                                          f"{self._format_dominance(outcome)}"
+                                          f"{self._format_timing(result)}")
+                self.save_button.setEnabled(True)
+                return
             self.score_label.setText("Score: infeasible")
             self.details.setPlainText(f"cost: {outcome.cost_name}\n"
                                       f"aggregation: {self.aggregation_combo.currentData()}\n"
@@ -1024,7 +1138,8 @@ class MainWindow(QMainWindow):
                                       f"arc-consistency removed: {pruning} candidates\n"
                                       f"effective candidates: {effective.total_candidates}, empty domains: {effective.empty_domains}\n"
                                       f"effective state estimate: {estimate:,}"
-                                      f"{self._format_timing(result)}", )
+                                      f"{self._format_dominance(outcome)}"
+                                      f"{self._format_timing(result)}")
             self.save_button.setEnabled(True)
             return
 
@@ -1042,7 +1157,8 @@ class MainWindow(QMainWindow):
                                   f"DP: {dp.enumerated_states:,} complete states, {dp.partial_assignments:,} partial assignments, "
                                   f"{dp.message_entries:,} messages, {dp.unique_cost_requests:,} unique local costs\n"
                                   f"computation: {'cache hit' if outcome.from_cache else f'{outcome.elapsed_seconds:.3f} s'}"
-                                  f"{self._format_timing(result)}", )
+                                  f"{self._format_dominance(outcome)}"
+                                  f"{self._format_timing(result)}")
         self.save_button.setEnabled(True)
 
     def _saved_import_matches_current_cost(self) -> bool:
@@ -1115,7 +1231,7 @@ class MainWindow(QMainWindow):
                                       f"valid witness for every source edge: {'yes' if evaluation.feasible else 'no'}\n"
                                       f"invalid edges: {invalid}\n"
                                       f"candidate-domain check: {candidate_note}"
-                                      f"{timing_text}", )
+                                      f"{timing_text}")
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
             self._set_solution_views(imported.mapping, imported.saved_edges)
             if objective == Objective.BOTTLENECK.value:
@@ -1137,7 +1253,7 @@ class MainWindow(QMainWindow):
                                       f"length-weighted additive score from saved local costs: "
                                       f"{imported.saved_length_weighted_additive_value if imported.saved_length_weighted_additive_value is not None else 'unknown'}\n"
                                       "The displayed witnesses are the witnesses stored in the JSON. "
-                                      "Click 'Score imported φ' to recompute them under the selected cost and options.", )
+                                      "Click 'Score imported φ' to recompute them under the selected cost and options.")
         else:
             self._set_mapping_views(imported.mapping)
             self.score_label.setText("Imported φ: not scored for this cost")
@@ -1145,7 +1261,7 @@ class MainWindow(QMainWindow):
                                       f"mapping: {len(imported.mapping)} source vertices\n"
                                       f"selected cost: {self.current_cost_name}\n"
                                       "Click 'Score imported φ' to evaluate this fixed mapping. "
-                                      "The optimizer will not run and the mapping will not change.", )
+                                      "The optimizer will not run and the mapping will not change.")
 
         self.score_mapping_button.setEnabled(not self._busy)
         self.save_button.setEnabled(False)
@@ -1310,7 +1426,7 @@ class MainWindow(QMainWindow):
                 continue
             edges.append(
                 MatchedEdge(edge_id=int(raw["edge_id"]), source_u=int(raw["source_u"]), source_v=int(raw["source_v"]), target_u=int(raw["target_u"]), target_v=int(raw["target_v"]),
-                            cost=float(raw["cost"]), witness=np.ascontiguousarray(witness), ), )
+                            cost=float(raw["cost"]), witness=np.ascontiguousarray(witness)))
         return tuple(sorted(edges, key=lambda edge: edge.edge_id))
 
     def _resolve_import_graph(self, metadata: Mapping[str, object], role: str, json_path: Path) -> Path:
@@ -1377,7 +1493,7 @@ class MainWindow(QMainWindow):
                     preferred = str(self.aggregation_combo.currentData())
                     default_index = next((i for i, item in enumerate(available) if item[0] == preferred), 0)
                     selected, accepted = QInputDialog.getItem(self, "Choose mapping", "The JSON contains multiple optimized mappings. Which φ should be imported?", labels,
-                                                              default_index, False, )
+                                                              default_index, False)
                     if not accepted:
                         return
                     chosen_objective, chosen_solution = available[labels.index(selected)]
@@ -1405,7 +1521,7 @@ class MainWindow(QMainWindow):
             normalized_source, loaded_target, swapped = load_matching_pair(self.repository, source_path, target_path, saved_mode)
             matching_target = prepare_candidate_target(normalized_source.graph, loaded_target.graph, candidate_mode=saved_mode, rho=saved_rho,
                                                        subdivision_points=saved_subdivision_points, adaptive_max_points_per_source=saved_adaptive_max_points_per_source,
-                                                       adaptive_min_separation=saved_adaptive_min_separation, )
+                                                       adaptive_min_separation=saved_adaptive_min_separation)
 
             if swapped:
                 raise ValueError("The imported JSON identifies the denser graph as the source; this UI only supports sparse-to-dense mappings.")
@@ -1443,7 +1559,7 @@ class MainWindow(QMainWindow):
                                        adaptive_min_separation=saved_adaptive_min_separation, mapping=mapping, saved_cost_name=saved_cost_name,
                                        saved_cost_options=saved_cost_options, saved_objective=chosen_objective, saved_value=saved_value, saved_edges=saved_edges,
                                        saved_additive_value=saved_additive, saved_bottleneck_value=saved_bottleneck,
-                                       saved_length_weighted_additive_value=saved_length_weighted_additive, )
+                                       saved_length_weighted_additive_value=saved_length_weighted_additive)
             self._imported_mapping = imported
 
             self.candidate_rho.setValue(saved_rho)
@@ -1489,7 +1605,7 @@ class MainWindow(QMainWindow):
                                     candidate_mode=self.current_candidate_mode, subdivision_points=self.subdivision_points.value(),
                                     adaptive_max_points_per_source=self.adaptive_max_points_per_source.value(), adaptive_min_separation=self.adaptive_min_separation.value(),
                                     mapping=imported.mapping, cost_name=self.current_cost_name, cost_options=self.cost_options.options_for(self.current_cost_name),
-                                    cancellation_token=token, )
+                                    cancellation_token=token)
         worker.signals.progress.connect(self._worker_progress)
         worker.signals.result.connect(self._mapping_score_ready)
         worker.signals.failed.connect(self._worker_failed_and_finish)
@@ -1540,6 +1656,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("subdivision_points", self.subdivision_points.value())
         self.settings.setValue("adaptive_max_points_per_source", self.adaptive_max_points_per_source.value())
         self.settings.setValue("adaptive_min_separation", self.adaptive_min_separation.value())
+        self.settings.setValue("dominance_mode", self.current_dominance_mode.value)
         self.settings.setValue("cost", self.current_cost_name)
         self.settings.setValue("aggregation", str(self.aggregation_combo.currentData()))
         event.accept()

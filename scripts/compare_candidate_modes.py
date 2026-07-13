@@ -18,7 +18,7 @@ SRC: Final[Path] = ROOT / "src"
 if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from river_matcher.candidates import (CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target, merge_candidate_sets, )
+from river_matcher.candidates import (CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, prepare_candidate_target, merge_candidate_sets)
 from river_matcher.decomposition import (SourceDecomposition, build_source_decomposition)
 from river_matcher.dynamic_programming import Objective
 from river_matcher.matcher import RiverGraphMatcher
@@ -149,8 +149,8 @@ def build_target(source: JunctionGraph, target_path: Path, mode: CandidateMode, 
 
 
 def candidate_sets_for_mode(source: JunctionGraph, junction_target: JunctionGraph, matching_target: JunctionGraph, mode: CandidateMode, *, rho: float, top_k: int,
-                            adaptive_max_points: int, ) -> dict[int, list[int]]:
-    baseline = compute_candidate_sets(source, junction_target, rho=rho, top_k=top_k, )
+                            adaptive_max_points: int) -> dict[int, list[int]]:
+    baseline = compute_candidate_sets(source, junction_target, rho=rho, top_k=top_k)
 
     if mode is CandidateMode.TARGET_JUNCTIONS:
         return baseline
@@ -166,7 +166,7 @@ def candidate_sets_for_mode(source: JunctionGraph, junction_target: JunctionGrap
 
     additional_limit = (adaptive_max_points if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS else max(1, len(additional_vertices)))
 
-    additions = compute_vertex_candidate_sets(source, matching_target, rho=rho, top_k=additional_limit, eligible_vertices=additional_vertices, )
+    additions = compute_vertex_candidate_sets(source, matching_target, rho=rho, top_k=additional_limit, eligible_vertices=additional_vertices)
 
     candidate_sets = merge_candidate_sets(baseline, additions)
 
@@ -183,7 +183,7 @@ def prepare_problem(source: JunctionGraph, target_path: Path, decomposition: Sou
     target = build_target(source, target_path, mode, rho=rho, subdivision_points=subdivision_points, adaptive_max_points=adaptive_max_points,
                           adaptive_min_separation=adaptive_min_separation, junction_cache=junction_cache, original_cache=original_cache)
     junction_target = junction_cache[target_path]
-    candidate_sets = candidate_sets_for_mode(source, junction_target, target, mode, rho=rho, top_k=top_k, adaptive_max_points=adaptive_max_points, )
+    candidate_sets = candidate_sets_for_mode(source, junction_target, target, mode, rho=rho, top_k=top_k, adaptive_max_points=adaptive_max_points)
     matcher = RiverGraphMatcher(source, target, candidate_sets=candidate_sets, decomposition=decomposition)
     return PreparedProblem(target, matcher)
 

@@ -20,15 +20,15 @@ def test_pair_session_cache_separates_candidate_modes_and_settings() -> None:
     store = PairSessionStore()
 
     baseline = store.get_or_create(source, target, candidate_rho=2.0, top_k=10, candidate_mode=CandidateMode.TARGET_JUNCTIONS, subdivision_points=2,
-        adaptive_max_points_per_source=8, adaptive_min_separation=1.0, )
+        adaptive_max_points_per_source=8, adaptive_min_separation=1.0)
     uniform = store.get_or_create(source, target, candidate_rho=2.0, top_k=10, candidate_mode=CandidateMode.UNIFORM_TARGET_SUBDIVISION, subdivision_points=2,
-        adaptive_max_points_per_source=8, adaptive_min_separation=1.0, )
+        adaptive_max_points_per_source=8, adaptive_min_separation=1.0)
     uniform_three = store.get_or_create(source, target, candidate_rho=2.0, top_k=10, candidate_mode=CandidateMode.UNIFORM_TARGET_SUBDIVISION, subdivision_points=3,
-        adaptive_max_points_per_source=8, adaptive_min_separation=1.0, )
+        adaptive_max_points_per_source=8, adaptive_min_separation=1.0)
     adaptive_eight = store.get_or_create(source, target, candidate_rho=2.0, top_k=10, candidate_mode=CandidateMode.ADAPTIVE_CLOSEST_POINTS, subdivision_points=2,
-        adaptive_max_points_per_source=8, adaptive_min_separation=1.0, )
+        adaptive_max_points_per_source=8, adaptive_min_separation=1.0)
     adaptive_four = store.get_or_create(source, target, candidate_rho=2.0, top_k=10, candidate_mode=CandidateMode.ADAPTIVE_CLOSEST_POINTS, subdivision_points=2,
-        adaptive_max_points_per_source=4, adaptive_min_separation=1.0, )
+        adaptive_max_points_per_source=4, adaptive_min_separation=1.0)
 
     assert baseline is not uniform
     assert uniform is not uniform_three

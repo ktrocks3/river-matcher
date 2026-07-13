@@ -124,7 +124,7 @@ def _closest_polyline_fraction(point: tuple[float, float], polyline: FloatArray)
 
 
 def subdivide_graph_adaptive_closest_points(source: JunctionGraph, target: JunctionGraph, *, rho: float, max_points_per_source: int = 8,
-        min_separation: float = 1.0, ) -> JunctionGraph:
+        min_separation: float = 1.0) -> JunctionGraph:
     """Split target edges at nearby closest points for each source vertex."""
     radius = float(rho)
     limit = int(max_points_per_source)
@@ -175,13 +175,13 @@ def subdivide_graph_adaptive_closest_points(source: JunctionGraph, target: Junct
 
 
 def prepare_candidate_target(source: JunctionGraph, target: JunctionGraph, *, candidate_mode: CandidateMode | str, rho: float, subdivision_points: int = 2,
-        adaptive_max_points_per_source: int = 8, adaptive_min_separation: float = 1.0, ) -> JunctionGraph:
+        adaptive_max_points_per_source: int = 8, adaptive_min_separation: float = 1.0) -> JunctionGraph:
     """Build the exact target graph whose vertices form the candidate universe."""
     mode = CandidateMode(candidate_mode)
     if mode is CandidateMode.UNIFORM_TARGET_SUBDIVISION:
         return subdivide_graph_uniform(target, samples_per_edge=subdivision_points)
     if mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS:
-        return subdivide_graph_adaptive_closest_points(source, target, rho=rho, max_points_per_source=adaptive_max_points_per_source, min_separation=adaptive_min_separation, )
+        return subdivide_graph_adaptive_closest_points(source, target, rho=rho, max_points_per_source=adaptive_max_points_per_source, min_separation=adaptive_min_separation)
     return target
 
 
@@ -259,7 +259,7 @@ def _prepare_target_edges(target: JunctionGraph) -> PreparedTargetEdges:
 
 @njit(cache=True, parallel=True, fastmath=False)
 def _candidate_edge_distances_numba(source_points: FloatArray, bboxes: FloatArray, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
-        edge_offsets: IntArray, rho: float, ) -> FloatArray:
+        edge_offsets: IntArray, rho: float) -> FloatArray:
     """Compute source-point distances to every target edge. Bounding-box rejection only skips edges whose exact distance must exceed rho; all retained distances use
     point-to-segment projection."""
     source_count = source_points.shape[0]
@@ -366,7 +366,7 @@ def compute_vertex_candidate_sets(
         point = np.asarray(source.coordinates[source_vertex], dtype=np.float64)
         distances = np.linalg.norm(target_points - point, axis=1)
         ordered = sorted(((float(distances[index]), int(target_ids[index])) for index in range(len(target_ids)) if float(distances[index]) <= radius),
-            key=lambda item: (item[0], item[1]), )
+            key=lambda item: (item[0], item[1]))
         candidate_sets[source_vertex] = [vertex for _, vertex in ordered[:limit]]
     return candidate_sets
 
@@ -401,7 +401,7 @@ def _bbox_point_lower_bound(point: tuple[float, float], bbox: FloatArray) -> flo
 
 
 def _point_to_packed_edge_distance(point: tuple[float, float], edge_index: int, segment_starts: FloatArray, segment_vectors: FloatArray, segment_squared_lengths: FloatArray,
-        edge_offsets: IntArray, ) -> float:
+        edge_offsets: IntArray) -> float:
     """Reference point-to-edge distance using the packed segment arrays."""
     px, py = point
     best_squared = math.inf

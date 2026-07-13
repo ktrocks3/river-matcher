@@ -516,9 +516,9 @@ def solve_tree_dp_both(decomposition: SourceDecomposition, candidate_sets: Candi
 
 
 def solve_tree_dp_all(decomposition: SourceDecomposition, candidate_sets: CandidateSets, edge_cost: EdgeCost, *, edge_weights: Mapping[int, float],
-        compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None, ) -> AllObjectiveResult:
+        compatibility: TargetConnectivityCompatibility | None = None, cancellation_token: CancellationToken | None = None) -> AllObjectiveResult:
     objectives = (Objective.ADDITIVE, Objective.BOTTLENECK, Objective.LENGTH_WEIGHTED_ADDITIVE)
     solutions, statistics = _solve(decomposition, candidate_sets, edge_cost, objectives, compatibility=compatibility, cancellation_token=cancellation_token,
-        edge_weights=edge_weights, )
+        edge_weights=edge_weights)
     return AllObjectiveResult(additive=solutions[Objective.ADDITIVE], bottleneck=solutions[Objective.BOTTLENECK],
-        length_weighted_additive=solutions[Objective.LENGTH_WEIGHTED_ADDITIVE], statistics=statistics, )
+        length_weighted_additive=solutions[Objective.LENGTH_WEIGHTED_ADDITIVE], statistics=statistics)

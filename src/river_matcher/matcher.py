@@ -17,9 +17,11 @@ from river_matcher.compatibility import CompatibilityStatistics, TargetConnectiv
 from river_matcher.costs.base import BaseEdgeCost, CostName
 from river_matcher.costs.factory import CostFactory
 from river_matcher.decomposition import SourceDecomposition, build_source_decomposition, validate_source_decomposition
+from river_matcher.dominance import DominancePruningResult, prune_dominated_candidates
 from river_matcher.dynamic_programming import DPStatistics, DPSolution, Objective, solve_tree_dp, solve_tree_dp_all, solve_tree_dp_both, solve_tree_feasibility
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight, estimate_matching
+from river_matcher.witnesses import WitnessTiming
 
 type FloatArray = NDArray[np.float64]
 type RawCandidateSets = Mapping[int, Iterable[int]]
@@ -51,10 +53,13 @@ class MatchTiming:
     witness_dijkstra_seconds: float = 0.0
     witness_dijkstra_runs: int = 0
     feasibility_reused: bool = False
+    dominance_pruning_seconds: float = 0.0
 
     @property
     def measured_pipeline_seconds(self) -> float:
-        return (self.arc_consistency_seconds + self.feasibility_dp_seconds + self.cost_setup_seconds + self.cost_dp_seconds + self.materialization_seconds)
+        return (
+                self.arc_consistency_seconds + self.feasibility_dp_seconds + self.dominance_pruning_seconds + self.cost_setup_seconds + self.cost_dp_seconds +
+                self.materialization_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +114,9 @@ class MatchResult:
     compatibility_statistics: CompatibilityStatistics | None = None
     feasibility_statistics: DPStatistics | None = None
     timing: MatchTiming | None = None
+    dominance_pruning: DominancePruningResult | None = None
+    dominance_preflight: MatchingPreflight | None = None
+    state_limit_reached: bool = False
 
     @property
     def feasible(self) -> bool:
@@ -158,6 +166,23 @@ class AggregationMatchResult:
     compatibility_statistics: CompatibilityStatistics | None = None
     feasibility_statistics: DPStatistics | None = None
     timing: MatchTiming | None = None
+    dominance_pruning: DominancePruningResult | None = None
+    dominance_preflight: MatchingPreflight | None = None
+    dominance_state_limit_reached: bool = False
+    state_limit_reached: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _DominancePreparation:
+    edge_cost: BaseEdgeCost
+    pruning: DominancePruningResult
+    preflight: MatchingPreflight
+    arc_consistency_seconds: float
+    cost_setup_seconds: float
+    cost_seconds_before: float
+    cost_calls_before: int
+    cost_hits_before: int
+    witness_before: WitnessTiming
 
 
 def _normalize_candidate_sets(source: JunctionGraph, target: JunctionGraph, candidate_sets: RawCandidateSets) -> dict[int, tuple[int, ...]]:
@@ -224,7 +249,7 @@ def _normalize_mapping(source: JunctionGraph, target: JunctionGraph, mapping: Ma
 def _candidate_statistics(candidate_sets: NormalizedCandidateSets) -> CandidateStatistics:
     sizes = tuple(len(candidates) for candidates in candidate_sets.values())
     return CandidateStatistics(source_vertices=len(sizes), empty_domains=sum(size == 0 for size in sizes), total_candidates=sum(sizes), minimum_candidates=min(sizes, default=0),
-        maximum_candidates=max(sizes, default=0), )
+                               maximum_candidates=max(sizes, default=0))
 
 
 def _edge_weights(source: JunctionGraph) -> dict[int, float]:
@@ -242,7 +267,7 @@ def _realized_value(source: JunctionGraph, edges: tuple[MatchedEdge, ...], objec
 
 
 def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, solution: DPSolution | None, *,
-        cancellation_token: CancellationToken | None = None, ) -> MatchSolution | None:
+                          cancellation_token: CancellationToken | None = None) -> MatchSolution | None:
     if solution is None:
         return None
 
@@ -275,7 +300,7 @@ def _materialize_solution(source: JunctionGraph, edge_cost: BaseEdgeCost, soluti
             raise RuntimeError(f"Recovered solution has no witness for source edge e{edge.id}: "
                                f"({edge.u}, {edge.v}) -> ({target_u}, {target_v}).")
 
-        matched_edges.append(MatchedEdge(edge_id=edge.id, source_u=edge.u, source_v=edge.v, target_u=target_u, target_v=target_v, cost=value, witness=witness, ))
+        matched_edges.append(MatchedEdge(edge_id=edge.id, source_u=edge.u, source_v=edge.v, target_u=target_u, target_v=target_v, cost=value, witness=witness))
 
     edges = tuple(matched_edges)
     realized_value = _realized_value(source, edges, solution.objective)
@@ -305,7 +330,7 @@ class RiverGraphMatcher:
                  "_costs", "_effective_candidate_sets", "_effective_preflight", "_feasibility_dp_seconds", "_feasibility_statistics", "_feasible", "_lock",)
 
     def __init__(self, source: JunctionGraph, target: JunctionGraph, *, candidate_rho: float = 10.0, top_k: int = 25, candidate_sets: RawCandidateSets | None = None,
-            decomposition: SourceDecomposition | None = None, validate_decomposition: bool = True, ) -> None:
+                 decomposition: SourceDecomposition | None = None, validate_decomposition: bool = True) -> None:
         self.source = source
         self.target = target
         raw_candidate_sets = (compute_candidate_sets(source, target, rho=candidate_rho, top_k=top_k) if candidate_sets is None else candidate_sets)
@@ -347,10 +372,10 @@ class RiverGraphMatcher:
     def effective_preflight(self) -> MatchingPreflight:
         return self.preflight if self._effective_preflight is None else self._effective_preflight
 
-    def prepare_feasibility(self, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None, ) -> bool:
+    def _prepare_structural_candidates(self, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None) -> None:
         with self._lock:
-            if self._feasible is not None:
-                return self._feasible
+            if self._effective_candidate_sets is not None:
+                return
 
             if cancellation_token is not None:
                 cancellation_token.check()
@@ -359,9 +384,24 @@ class RiverGraphMatcher:
                 progress("Pruning incompatible candidates")
 
             started = time.perf_counter()
-            effective, compatibility_statistics = enforce_arc_consistency(self._compatibility, self.candidate_sets, cancellation_token=cancellation_token, )
+            effective, compatibility_statistics = enforce_arc_consistency(self._compatibility, self.candidate_sets, cancellation_token=cancellation_token)
             self._arc_consistency_seconds += time.perf_counter() - started
-            effective_preflight = estimate_matching(self.decomposition, effective)
+
+            if cancellation_token is not None:
+                cancellation_token.check()
+
+            self._effective_candidate_sets = effective
+            self._compatibility_statistics = compatibility_statistics
+            self._effective_preflight = estimate_matching(self.decomposition, effective)
+
+    def prepare_feasibility(self, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None) -> bool:
+        with self._lock:
+            if self._feasible is not None:
+                return self._feasible
+
+            self._prepare_structural_candidates(cancellation_token=cancellation_token, progress=progress)
+            effective = self.effective_candidate_sets
+            effective_preflight = self.effective_preflight
 
             if effective_preflight.empty_domains:
                 feasible = False
@@ -371,7 +411,7 @@ class RiverGraphMatcher:
                     progress("Checking global feasibility")
 
                 started = time.perf_counter()
-                feasibility = solve_tree_feasibility(self.decomposition, effective, self._compatibility, cancellation_token=cancellation_token, )
+                feasibility = solve_tree_feasibility(self.decomposition, effective, self._compatibility, cancellation_token=cancellation_token)
                 self._feasibility_dp_seconds += time.perf_counter() - started
                 feasible = feasibility.feasible
                 feasibility_statistics = feasibility.statistics
@@ -379,9 +419,6 @@ class RiverGraphMatcher:
             if cancellation_token is not None:
                 cancellation_token.check()
 
-            self._effective_candidate_sets = effective
-            self._compatibility_statistics = compatibility_statistics
-            self._effective_preflight = effective_preflight
             self._feasible = feasible
             self._feasibility_statistics = feasibility_statistics
             return feasible
@@ -398,15 +435,16 @@ class RiverGraphMatcher:
 
     def _common_metadata(self) -> dict[str, object]:
         return {"candidate_sets": self.candidate_sets, "candidate_statistics": self.candidate_statistics, "decomposition": self.decomposition,
-            "effective_candidate_sets": self.effective_candidate_sets, "effective_candidate_statistics": self.effective_candidate_statistics, "preflight": self.preflight,
-            "effective_preflight": self.effective_preflight, "compatibility_statistics": self._compatibility_statistics, "feasibility_statistics": self._feasibility_statistics, }
+                "effective_candidate_sets": self.effective_candidate_sets, "effective_candidate_statistics": self.effective_candidate_statistics, "preflight": self.preflight,
+                "effective_preflight": self.effective_preflight, "compatibility_statistics": self._compatibility_statistics,
+                "feasibility_statistics": self._feasibility_statistics, }
 
     def _feasibility_timing(self, arc_before: float, feasibility_before: float, reused: bool) -> MatchTiming:
         return MatchTiming(arc_consistency_seconds=self._arc_consistency_seconds - arc_before, feasibility_dp_seconds=self._feasibility_dp_seconds - feasibility_before,
-            feasibility_reused=reused, )
+                           feasibility_reused=reused)
 
     def evaluate_mapping(self, mapping: Mapping[int, int], cost_name: CostName | str, *, cancellation_token: CancellationToken | None = None,
-            progress: ProgressCallback | None = None, **cost_options: object, ) -> MappingEvaluation:
+                         progress: ProgressCallback | None = None, **cost_options: object) -> MappingEvaluation:
         """Evaluate one fixed vertex mapping without running the optimization DP.
 
         The mapping score is the sum (additive) or maximum (bottleneck) of the
@@ -452,7 +490,7 @@ class RiverGraphMatcher:
                     invalid_edge_ids.append(edge.id)
                     continue
 
-                matched_edges.append(MatchedEdge(edge_id=edge.id, source_u=edge.u, source_v=edge.v, target_u=target_u, target_v=target_v, cost=value, witness=witness, ))
+                matched_edges.append(MatchedEdge(edge_id=edge.id, source_u=edge.u, source_v=edge.v, target_u=target_u, target_v=target_v, cost=value, witness=witness))
 
             evaluation_seconds = time.perf_counter() - started
             witness_after = self.cost_factory.resources.guided_timing()
@@ -465,19 +503,121 @@ class RiverGraphMatcher:
             effective_candidate_violations = tuple(
                 source_vertex for source_vertex, target_vertex in normalized.items() if target_vertex not in self.effective_candidate_sets[source_vertex])
             timing = MatchTiming(cost_setup_seconds=cost_setup_seconds, materialization_seconds=evaluation_seconds,
-                uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before, uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before,
-                local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before, witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
-                witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
-                witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
-                witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, )
+                                 uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+                                 uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before,
+                                 local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+                                 witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+                                 witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+                                 witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+                                 witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs)
             return MappingEvaluation(cost_name=resolved_name, mapping=normalized, edges=edges, additive_value=additive_value, bottleneck_value=bottleneck_value,
-                length_weighted_additive_value=length_weighted_additive_value, invalid_edge_ids=tuple(invalid_edge_ids), candidate_violations=candidate_violations,
-                effective_candidate_violations=effective_candidate_violations, timing=timing, )
+                                     length_weighted_additive_value=length_weighted_additive_value, invalid_edge_ids=tuple(invalid_edge_ids),
+                                     candidate_violations=candidate_violations, effective_candidate_violations=effective_candidate_violations, timing=timing)
 
-    def match(self, cost_name: CostName | str, objective: Objective | str, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
-            **cost_options: object, ) -> MatchResult:
+    def _prepare_dominance(self, resolved_name: CostName, cost_options: Mapping[str, object], *, dominance_comparison_limit: int | None,
+                           cancellation_token: CancellationToken | None, progress: ProgressCallback | None) -> _DominancePreparation:
+        arc_before = self._arc_consistency_seconds
+        self._prepare_structural_candidates(cancellation_token=cancellation_token, progress=progress)
+        arc_consistency_seconds = self._arc_consistency_seconds - arc_before
+
+        if progress is not None:
+            progress(f"Preparing {resolved_name.value.replace('_', ' ')}")
+
+        started = time.perf_counter()
+        edge_cost = self._cost(resolved_name, cost_options)
+        cost_setup_seconds = time.perf_counter() - started
+        cost_seconds_before = edge_cost.timing.uncached_seconds
+        cost_calls_before = edge_cost.timing.uncached_calls
+        cost_hits_before = edge_cost.timing.cache_hits
+        witness_before = self.cost_factory.resources.guided_timing()
+
+        if progress is not None:
+            progress("Pruning cost-dominated candidates")
+
+        dominance = prune_dominated_candidates(self.source, self.effective_candidate_sets, edge_cost, self._compatibility, comparison_limit=dominance_comparison_limit,
+                                               cancellation_token=cancellation_token)
+        dominance_preflight = estimate_matching(self.decomposition, dominance.candidate_sets)
+        return _DominancePreparation(edge_cost=edge_cost, pruning=dominance, preflight=dominance_preflight, arc_consistency_seconds=arc_consistency_seconds,
+                                     cost_setup_seconds=cost_setup_seconds, cost_seconds_before=cost_seconds_before, cost_calls_before=cost_calls_before,
+                                     cost_hits_before=cost_hits_before, witness_before=witness_before)
+
+    def _dominance_timing(self, preparation: _DominancePreparation, *, feasibility_dp_seconds: float = 0.0, cost_dp_seconds: float = 0.0,
+                          materialization_seconds: float = 0.0) -> MatchTiming:
+        edge_cost = preparation.edge_cost
+        witness_after = self.cost_factory.resources.guided_timing()
+        return MatchTiming(arc_consistency_seconds=preparation.arc_consistency_seconds, feasibility_dp_seconds=feasibility_dp_seconds,
+                           dominance_pruning_seconds=preparation.pruning.elapsed_seconds, cost_setup_seconds=preparation.cost_setup_seconds, cost_dp_seconds=cost_dp_seconds,
+                           materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - preparation.cost_seconds_before,
+                           uncached_local_cost_calls=edge_cost.timing.uncached_calls - preparation.cost_calls_before,
+                           local_cost_cache_hits=edge_cost.timing.cache_hits - preparation.cost_hits_before,
+                           witness_adjacency_seconds=witness_after.adjacency_seconds - preparation.witness_before.adjacency_seconds,
+                           witness_adjacency_builds=witness_after.adjacency_builds - preparation.witness_before.adjacency_builds,
+                           witness_dijkstra_seconds=witness_after.dijkstra_seconds - preparation.witness_before.dijkstra_seconds,
+                           witness_dijkstra_runs=witness_after.dijkstra_runs - preparation.witness_before.dijkstra_runs, feasibility_reused=False)
+
+    def _match_with_dominance(self, resolved_name: CostName, resolved_objective: Objective, cost_options: Mapping[str, object], *, dominance_comparison_limit: int | None,
+                              dominance_state_limit: int | None, cancellation_token: CancellationToken | None, progress: ProgressCallback | None) -> MatchResult:
+        preparation = self._prepare_dominance(resolved_name, cost_options, dominance_comparison_limit=dominance_comparison_limit, cancellation_token=cancellation_token,
+                                              progress=progress)
+        edge_cost = preparation.edge_cost
+        dominance = preparation.pruning
+        dominance_preflight = preparation.preflight
+        optimization_candidates = dominance.candidate_sets
+        metadata = self._common_metadata()
+
+        if dominance_state_limit is not None and 0 < dominance_state_limit < dominance_preflight.estimated_state_upper_bound:
+            metadata["feasibility_statistics"] = None
+            return MatchResult(cost_name=edge_cost.name, solution=None, dp_statistics=_empty_statistics(), timing=self._dominance_timing(preparation), dominance_pruning=dominance,
+                               dominance_preflight=dominance_preflight, state_limit_reached=True, **metadata)
+
+        if dominance_preflight.empty_domains:
+            feasible = False
+            feasibility_statistics = _empty_statistics()
+            feasibility_dp_seconds = 0.0
+        else:
+            if progress is not None:
+                progress("Checking global feasibility")
+
+            started = time.perf_counter()
+            feasibility = solve_tree_feasibility(self.decomposition, optimization_candidates, self._compatibility, cancellation_token=cancellation_token)
+            feasibility_dp_seconds = time.perf_counter() - started
+            feasible = feasibility.feasible
+            feasibility_statistics = feasibility.statistics
+
+        metadata["feasibility_statistics"] = feasibility_statistics
+        cost_dp_seconds = 0.0
+        materialization_seconds = 0.0
+        solution: MatchSolution | None = None
+        dp_statistics = feasibility_statistics
+
+        if feasible:
+            if progress is not None:
+                progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
+
+            started = time.perf_counter()
+            result = solve_tree_dp(self.decomposition, optimization_candidates, edge_cost, resolved_objective, compatibility=self._compatibility,
+                                   cancellation_token=cancellation_token, edge_weights=_edge_weights(self.source))
+            cost_dp_seconds = time.perf_counter() - started
+            started = time.perf_counter()
+            solution = _materialize_solution(self.source, edge_cost, result.solution, cancellation_token=cancellation_token)
+            materialization_seconds = time.perf_counter() - started
+            dp_statistics = result.statistics
+
+        timing = self._dominance_timing(preparation, feasibility_dp_seconds=feasibility_dp_seconds, cost_dp_seconds=cost_dp_seconds,
+                                        materialization_seconds=materialization_seconds)
+        return MatchResult(cost_name=edge_cost.name, solution=solution, dp_statistics=dp_statistics, timing=timing, dominance_pruning=dominance,
+                           dominance_preflight=dominance_preflight, **metadata)
+
+    def match(self, cost_name: CostName | str, objective: Objective | str, *, dominance_pruning: bool = False, dominance_comparison_limit: int | None = None,
+              dominance_state_limit: int | None = None, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
+              **cost_options: object) -> MatchResult:
         resolved_name = CostName(cost_name)
         resolved_objective = Objective(objective)
+
+        if dominance_pruning:
+            return self._match_with_dominance(resolved_name, resolved_objective, cost_options, dominance_comparison_limit=dominance_comparison_limit,
+                                              dominance_state_limit=dominance_state_limit, cancellation_token=cancellation_token, progress=progress)
+
         feasibility_reused = self._feasible is not None
         arc_before = self._arc_consistency_seconds
         feasibility_before = self._feasibility_dp_seconds
@@ -486,7 +626,7 @@ class RiverGraphMatcher:
         metadata = self._common_metadata()
 
         if not feasible:
-            return MatchResult(cost_name=resolved_name, solution=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing, **metadata, )
+            return MatchResult(cost_name=resolved_name, solution=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing, **metadata)
 
         if progress is not None:
             progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
@@ -501,23 +641,24 @@ class RiverGraphMatcher:
         witness_before = self.cost_factory.resources.guided_timing()
         started = time.perf_counter()
         result = solve_tree_dp(self.decomposition, self.effective_candidate_sets, edge_cost, resolved_objective, compatibility=self._compatibility,
-            cancellation_token=cancellation_token, edge_weights=_edge_weights(self.source), )
+                               cancellation_token=cancellation_token, edge_weights=_edge_weights(self.source))
         cost_dp_seconds = time.perf_counter() - started
         started = time.perf_counter()
-        solution = _materialize_solution(self.source, edge_cost, result.solution, cancellation_token=cancellation_token, )
+        solution = _materialize_solution(self.source, edge_cost, result.solution, cancellation_token=cancellation_token)
         materialization_seconds = time.perf_counter() - started
         witness_after = self.cost_factory.resources.guided_timing()
         timing = MatchTiming(arc_consistency_seconds=timing.arc_consistency_seconds, feasibility_dp_seconds=timing.feasibility_dp_seconds, cost_setup_seconds=cost_setup_seconds,
-            cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
-            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
-            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
-            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
-            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
-            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused, )
+                             cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds,
+                             uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+                             uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+                             witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+                             witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+                             witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+                             witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused)
         return MatchResult(cost_name=edge_cost.name, solution=solution, dp_statistics=result.statistics, timing=timing, **metadata)
 
     def match_both(self, cost_name: CostName | str, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
-            **cost_options: object, ) -> BothMatchResult:
+                   **cost_options: object) -> BothMatchResult:
         resolved_name = CostName(cost_name)
         feasibility_reused = self._feasible is not None
         arc_before = self._arc_consistency_seconds
@@ -528,7 +669,7 @@ class RiverGraphMatcher:
 
         if not feasible:
             return BothMatchResult(cost_name=resolved_name, additive=None, bottleneck=None, dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing,
-                **metadata, )
+                                   **metadata)
 
         if progress is not None:
             progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
@@ -542,35 +683,110 @@ class RiverGraphMatcher:
         cost_hits_before = cost_before.cache_hits
         witness_before = self.cost_factory.resources.guided_timing()
         started = time.perf_counter()
-        result = solve_tree_dp_both(self.decomposition, self.effective_candidate_sets, edge_cost, compatibility=self._compatibility, cancellation_token=cancellation_token, )
+        result = solve_tree_dp_both(self.decomposition, self.effective_candidate_sets, edge_cost, compatibility=self._compatibility, cancellation_token=cancellation_token)
         cost_dp_seconds = time.perf_counter() - started
         started = time.perf_counter()
-        additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token, )
-        bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token, )
+        additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token)
+        bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token)
         materialization_seconds = time.perf_counter() - started
         witness_after = self.cost_factory.resources.guided_timing()
         timing = MatchTiming(arc_consistency_seconds=timing.arc_consistency_seconds, feasibility_dp_seconds=timing.feasibility_dp_seconds, cost_setup_seconds=cost_setup_seconds,
-            cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
-            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
-            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
-            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
-            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
-            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused, )
-        return BothMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, dp_statistics=result.statistics, timing=timing, **metadata, )
+                             cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds,
+                             uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+                             uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+                             witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+                             witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+                             witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+                             witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused)
+        return BothMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, dp_statistics=result.statistics, timing=timing, **metadata)
 
-    def match_all(self, cost_name: CostName | str, *, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
-            **cost_options: object, ) -> AggregationMatchResult:
+    def _match_all_with_dominance(self, resolved_name: CostName, cost_options: Mapping[str, object], *, dominance_comparison_limit: int | None, dominance_state_limit: int | None,
+                                  cancellation_token: CancellationToken | None, progress: ProgressCallback | None) -> AggregationMatchResult:
+        preparation = self._prepare_dominance(resolved_name, cost_options, dominance_comparison_limit=dominance_comparison_limit, cancellation_token=cancellation_token,
+                                              progress=progress)
+        edge_cost = preparation.edge_cost
+        dominance = preparation.pruning
+        dominance_preflight = preparation.preflight
+        optimization_candidates = dominance.candidate_sets
+        metadata = self._common_metadata()
+
+        if dominance_state_limit is not None and 0 < dominance_state_limit < dominance_preflight.estimated_state_upper_bound:
+            metadata["feasibility_statistics"] = None
+            return AggregationMatchResult(cost_name=edge_cost.name, additive=None, bottleneck=None, length_weighted_additive=None, dp_statistics=_empty_statistics(),
+                                          timing=self._dominance_timing(preparation), dominance_pruning=dominance, dominance_preflight=dominance_preflight,
+                                          dominance_state_limit_reached=True, **metadata)
+
+        if dominance_preflight.empty_domains:
+            feasible = False
+            feasibility_statistics = _empty_statistics()
+            feasibility_dp_seconds = 0.0
+        else:
+            if progress is not None:
+                progress("Checking global feasibility")
+
+            started = time.perf_counter()
+            feasibility = solve_tree_feasibility(self.decomposition, optimization_candidates, self._compatibility, cancellation_token=cancellation_token)
+            feasibility_dp_seconds = time.perf_counter() - started
+            feasible = feasibility.feasible
+            feasibility_statistics = feasibility.statistics
+
+        metadata["feasibility_statistics"] = feasibility_statistics
+        cost_dp_seconds = 0.0
+        materialization_seconds = 0.0
+        additive: MatchSolution | None = None
+        bottleneck: MatchSolution | None = None
+        length_weighted_additive: MatchSolution | None = None
+        dp_statistics = feasibility_statistics
+
+        if feasible:
+            if progress is not None:
+                progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
+
+            started = time.perf_counter()
+            result = solve_tree_dp_all(self.decomposition, optimization_candidates, edge_cost, edge_weights=_edge_weights(self.source), compatibility=self._compatibility,
+                                       cancellation_token=cancellation_token)
+            cost_dp_seconds = time.perf_counter() - started
+            started = time.perf_counter()
+            additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token)
+            bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token)
+            length_weighted_additive = _materialize_solution(self.source, edge_cost, result.length_weighted_additive, cancellation_token=cancellation_token)
+            materialization_seconds = time.perf_counter() - started
+            dp_statistics = result.statistics
+
+        timing = self._dominance_timing(preparation, feasibility_dp_seconds=feasibility_dp_seconds, cost_dp_seconds=cost_dp_seconds,
+                                        materialization_seconds=materialization_seconds)
+        return AggregationMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, length_weighted_additive=length_weighted_additive,
+                                      dp_statistics=dp_statistics, timing=timing, dominance_pruning=dominance, dominance_preflight=dominance_preflight, **metadata)
+
+    def match_all(self, cost_name: CostName | str, *, dominance_pruning: bool = False, dominance_comparison_limit: int | None = None, dominance_state_limit: int | None = None,
+                  state_limit: int | None = None, cancellation_token: CancellationToken | None = None, progress: ProgressCallback | None = None,
+                  **cost_options: object) -> AggregationMatchResult:
         resolved_name = CostName(cost_name)
+
+        if dominance_pruning:
+            return self._match_all_with_dominance(resolved_name, cost_options, dominance_comparison_limit=dominance_comparison_limit, dominance_state_limit=dominance_state_limit,
+                                                  cancellation_token=cancellation_token, progress=progress)
+
         feasibility_reused = self._feasible is not None
         arc_before = self._arc_consistency_seconds
         feasibility_before = self._feasibility_dp_seconds
+
+        if state_limit is not None:
+            self._prepare_structural_candidates(cancellation_token=cancellation_token, progress=progress)
+            if 0 < state_limit < self.effective_preflight.estimated_state_upper_bound:
+                metadata = self._common_metadata()
+                metadata["feasibility_statistics"] = None
+                timing = self._feasibility_timing(arc_before, feasibility_before, feasibility_reused)
+                return AggregationMatchResult(cost_name=resolved_name, additive=None, bottleneck=None, length_weighted_additive=None, dp_statistics=_empty_statistics(),
+                                              timing=timing, state_limit_reached=True, **metadata)
+
         feasible = self.prepare_feasibility(cancellation_token=cancellation_token, progress=progress)
         timing = self._feasibility_timing(arc_before, feasibility_before, feasibility_reused)
         metadata = self._common_metadata()
 
         if not feasible:
             return AggregationMatchResult(cost_name=resolved_name, additive=None, bottleneck=None, length_weighted_additive=None,
-                dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing, **metadata, )
+                                          dp_statistics=self._feasibility_statistics or _empty_statistics(), timing=timing, **metadata)
 
         if progress is not None:
             progress(f"Evaluating {resolved_name.value.replace('_', ' ')}")
@@ -585,32 +801,35 @@ class RiverGraphMatcher:
         witness_before = self.cost_factory.resources.guided_timing()
         started = time.perf_counter()
         result = solve_tree_dp_all(self.decomposition, self.effective_candidate_sets, edge_cost, edge_weights=_edge_weights(self.source), compatibility=self._compatibility,
-            cancellation_token=cancellation_token, )
+                                   cancellation_token=cancellation_token)
         cost_dp_seconds = time.perf_counter() - started
         started = time.perf_counter()
         additive = _materialize_solution(self.source, edge_cost, result.additive, cancellation_token=cancellation_token)
         bottleneck = _materialize_solution(self.source, edge_cost, result.bottleneck, cancellation_token=cancellation_token)
-        length_weighted_additive = _materialize_solution(self.source, edge_cost, result.length_weighted_additive, cancellation_token=cancellation_token, )
+        length_weighted_additive = _materialize_solution(self.source, edge_cost, result.length_weighted_additive, cancellation_token=cancellation_token)
         materialization_seconds = time.perf_counter() - started
         witness_after = self.cost_factory.resources.guided_timing()
         timing = MatchTiming(arc_consistency_seconds=timing.arc_consistency_seconds, feasibility_dp_seconds=timing.feasibility_dp_seconds, cost_setup_seconds=cost_setup_seconds,
-            cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds, uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
-            uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
-            witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
-            witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
-            witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
-            witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused, )
+                             cost_dp_seconds=cost_dp_seconds, materialization_seconds=materialization_seconds,
+                             uncached_local_cost_seconds=edge_cost.timing.uncached_seconds - cost_seconds_before,
+                             uncached_local_cost_calls=edge_cost.timing.uncached_calls - cost_calls_before, local_cost_cache_hits=edge_cost.timing.cache_hits - cost_hits_before,
+                             witness_adjacency_seconds=witness_after.adjacency_seconds - witness_before.adjacency_seconds,
+                             witness_adjacency_builds=witness_after.adjacency_builds - witness_before.adjacency_builds,
+                             witness_dijkstra_seconds=witness_after.dijkstra_seconds - witness_before.dijkstra_seconds,
+                             witness_dijkstra_runs=witness_after.dijkstra_runs - witness_before.dijkstra_runs, feasibility_reused=timing.feasibility_reused)
         return AggregationMatchResult(cost_name=edge_cost.name, additive=additive, bottleneck=bottleneck, length_weighted_additive=length_weighted_additive,
-            dp_statistics=result.statistics, timing=timing, **metadata, )
+                                      dp_statistics=result.statistics, timing=timing, **metadata)
 
 
 def match_graphs(source: JunctionGraph, target: JunctionGraph, cost_name: CostName | str, objective: Objective | str, *, candidate_rho: float = 10.0, top_k: int = 25,
-        cost_options: Mapping[str, object] | None = None, cancellation_token: CancellationToken | None = None, ) -> MatchResult:
+                 cost_options: Mapping[str, object] | None = None, dominance_pruning: bool = False, dominance_comparison_limit: int | None = None,
+                 cancellation_token: CancellationToken | None = None) -> MatchResult:
     matcher = RiverGraphMatcher(source, target, candidate_rho=candidate_rho, top_k=top_k)
-    return matcher.match(cost_name, objective, cancellation_token=cancellation_token, **dict(cost_options or {}), )
+    return matcher.match(cost_name, objective, dominance_pruning=dominance_pruning, dominance_comparison_limit=dominance_comparison_limit, cancellation_token=cancellation_token,
+                         **dict(cost_options or {}))
 
 
 def match_graphs_both(source: JunctionGraph, target: JunctionGraph, cost_name: CostName | str, *, candidate_rho: float = 10.0, top_k: int = 25,
-        cost_options: Mapping[str, object] | None = None, cancellation_token: CancellationToken | None = None, ) -> BothMatchResult:
+                      cost_options: Mapping[str, object] | None = None, cancellation_token: CancellationToken | None = None) -> BothMatchResult:
     matcher = RiverGraphMatcher(source, target, candidate_rho=candidate_rho, top_k=top_k)
-    return matcher.match_both(cost_name, cancellation_token=cancellation_token, **dict(cost_options or {}), )
+    return matcher.match_both(cost_name, cancellation_token=cancellation_token, **dict(cost_options or {}))

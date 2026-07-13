@@ -15,13 +15,13 @@ if SRC.is_dir() and str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from river_matcher.candidates import (  # noqa: E402
-    CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, merge_candidate_sets, prepare_candidate_target, )
+    CandidateMode, compute_candidate_sets, compute_vertex_candidate_sets, merge_candidate_sets, prepare_candidate_target)
 from river_matcher.decomposition import (  # noqa: E402
-    SourceDecomposition, build_source_decomposition, )
+    SourceDecomposition, build_source_decomposition)
 from river_matcher.models import JunctionGraph  # noqa: E402
 from river_matcher.preflight import MatchingPreflight, estimate_matching  # noqa: E402
 from river_matcher.preprocessing import (  # noqa: E402
-    load_embedded_graph, load_junction_graph, )
+    load_embedded_graph, load_junction_graph)
 
 CANDIDATE_SEMANTICS: Final[str] = "baseline_junctions_plus_mode_additions"
 
@@ -86,7 +86,7 @@ class PreflightEvaluator:
     """Evaluate one source-target-mode configuration at arbitrary radii."""
 
     def __init__(self, source: JunctionGraph, junction_target: JunctionGraph, original_target: JunctionGraph | None, decomposition: SourceDecomposition, *, mode: CandidateMode,
-            top_k: int, subdivision_points: int, adaptive_max_points: int, adaptive_min_separation: float, ) -> None:
+            top_k: int, subdivision_points: int, adaptive_max_points: int, adaptive_min_separation: float) -> None:
         self.source = source
         self.junction_target = junction_target
         self.original_target = original_target
@@ -114,10 +114,10 @@ class PreflightEvaluator:
             return self.junction_target
 
         return prepare_candidate_target(self.source, self._base_target(), candidate_mode=self.mode, rho=rho, subdivision_points=self.subdivision_points,
-            adaptive_max_points_per_source=self.adaptive_max_points, adaptive_min_separation=self.adaptive_min_separation, )
+            adaptive_max_points_per_source=self.adaptive_max_points, adaptive_min_separation=self.adaptive_min_separation)
 
-    def _candidate_sets(self, matching_target: JunctionGraph, *, rho: float, ) -> dict[int, list[int]]:
-        baseline = compute_candidate_sets(self.source, self.junction_target, rho=rho, top_k=self.top_k, )
+    def _candidate_sets(self, matching_target: JunctionGraph, *, rho: float) -> dict[int, list[int]]:
+        baseline = compute_candidate_sets(self.source, self.junction_target, rho=rho, top_k=self.top_k)
 
         if self.mode is CandidateMode.TARGET_JUNCTIONS:
             return baseline
@@ -133,7 +133,7 @@ class PreflightEvaluator:
         additional_vertices = matching_vertices - junction_vertices
         additional_limit = (self.adaptive_max_points if self.mode is CandidateMode.ADAPTIVE_CLOSEST_POINTS else max(1, len(additional_vertices)))
 
-        additions = compute_vertex_candidate_sets(self.source, matching_target, rho=rho, top_k=additional_limit, eligible_vertices=additional_vertices, )
+        additions = compute_vertex_candidate_sets(self.source, matching_target, rho=rho, top_k=additional_limit, eligible_vertices=additional_vertices)
         candidate_sets = merge_candidate_sets(baseline, additions)
 
         unknown = sorted({candidate for domain in candidate_sets.values() for candidate in domain} - matching_vertices)
@@ -168,12 +168,12 @@ class PreflightEvaluator:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=("Find the minimum candidate radius for every sparse-to-dense pair "
                                                   "using baseline-plus-additions candidate semantics."))
-    parser.add_argument("--graph-dir", type=Path, default=ROOT / "GraphExport", help="Directory containing TopoTide .txt exports.", )
-    parser.add_argument("--output", type=Path, default=ROOT / "candidate_radius_preflight.csv", help="CSV output path. Existing files are overwritten.", )
+    parser.add_argument("--graph-dir", type=Path, default=ROOT / "GraphExport", help="Directory containing TopoTide .txt exports.")
+    parser.add_argument("--output", type=Path, default=ROOT / "candidate_radius_preflight.csv", help="CSV output path. Existing files are overwritten.")
     parser.add_argument("--top-k", type=int, default=25)
-    parser.add_argument("--precision", type=float, default=0.001, help="Reported minimum-radius precision.", )
-    parser.add_argument("--initial-radius", type=float, default=1.0, help="Initial upper bound for exponential search.", )
-    parser.add_argument("--max-radius", type=float, default=100.0, help="Stop if no feasible radius is found at or below this value.", )
+    parser.add_argument("--precision", type=float, default=0.001, help="Reported minimum-radius precision.")
+    parser.add_argument("--initial-radius", type=float, default=1.0, help="Initial upper bound for exponential search.")
+    parser.add_argument("--max-radius", type=float, default=100.0, help="Stop if no feasible radius is found at or below this value.")
     parser.add_argument("--subdivision-points", type=int, default=2)
     parser.add_argument("--adaptive-max-points", type=int, default=8)
     parser.add_argument("--adaptive-min-separation", type=float, default=1.0)
@@ -218,7 +218,7 @@ def load_graphs(graph_dir: Path) -> list[GraphRecord]:
     return records
 
 
-def directed_pairs(records: list[GraphRecord], ) -> list[tuple[GraphRecord, GraphRecord]]:
+def directed_pairs(records: list[GraphRecord]) -> list[tuple[GraphRecord, GraphRecord]]:
     pairs: list[tuple[GraphRecord, GraphRecord]] = []
 
     for left_index, left in enumerate(records):
@@ -241,7 +241,7 @@ def round_up(value: float, precision: float) -> float:
     return max(0.0, units * precision)
 
 
-def find_minimum_radius(evaluator: PreflightEvaluator, *, precision: float, initial_radius: float, max_radius: float, ) -> SearchResult:
+def find_minimum_radius(evaluator: PreflightEvaluator, *, precision: float, initial_radius: float, max_radius: float) -> SearchResult:
     started = time.perf_counter()
 
     try:
@@ -259,7 +259,7 @@ def find_minimum_radius(evaluator: PreflightEvaluator, *, precision: float, init
             high_result = evaluator.evaluate(high)
 
         if not high_result.preflight.possible:
-            return SearchResult(None, time.perf_counter() - started, error=f"no radius <= {max_radius:g} removed all empty domains", )
+            return SearchResult(None, time.perf_counter() - started, error=f"no radius <= {max_radius:g} removed all empty domains")
 
         while high - low > precision / 4.0:
             middle = (low + high) / 2.0
@@ -279,16 +279,16 @@ def find_minimum_radius(evaluator: PreflightEvaluator, *, precision: float, init
 
         if not final.preflight.possible:
             return SearchResult(None, time.perf_counter() - started, error=("binary search found a threshold, but the rounded radius "
-                                                                            "was not preflight-feasible"), )
+                                                                            "was not preflight-feasible"))
 
         return SearchResult(final, time.perf_counter() - started)
 
     except Exception as error:
-        return SearchResult(None, time.perf_counter() - started, error=f"{type(error).__name__}: {error}", )
+        return SearchResult(None, time.perf_counter() - started, error=f"{type(error).__name__}: {error}")
 
 
 def csv_row(source: GraphRecord, target: GraphRecord, mode: CandidateMode, result: SearchResult, *, top_k: int, subdivision_points: int, adaptive_max_points: int,
-        adaptive_min_separation: float, ) -> dict[str, object]:
+        adaptive_min_separation: float) -> dict[str, object]:
     base: dict[str, object] = {"candidate_semantics": CANDIDATE_SEMANTICS, "source": source.path.stem, "target": target.path.stem, "source_vertices": source.vertices,
         "source_edges": source.edges, "target_junction_vertices": target.vertices, "target_junction_edges": target.edges, "candidate_mode": mode.value, "top_k": top_k,
         "subdivision_points": subdivision_points, "adaptive_max_points_per_source": adaptive_max_points, "adaptive_min_separation": adaptive_min_separation,
@@ -345,11 +345,11 @@ def main() -> int:
 
                 print(f"[{job:>3}/{total_jobs}] "
                       f"{source_record.path.stem} -> {target_record.path.stem} | "
-                      f"{mode.display_name}", flush=True, )
+                      f"{mode.display_name}", flush=True)
 
                 evaluator = PreflightEvaluator(source_record.junction, target_record.junction, original_target, decomposition, mode=mode, top_k=args.top_k,
-                    subdivision_points=args.subdivision_points, adaptive_max_points=args.adaptive_max_points, adaptive_min_separation=args.adaptive_min_separation, )
-                result = find_minimum_radius(evaluator, precision=args.precision, initial_radius=args.initial_radius, max_radius=args.max_radius, )
+                    subdivision_points=args.subdivision_points, adaptive_max_points=args.adaptive_max_points, adaptive_min_separation=args.adaptive_min_separation)
+                result = find_minimum_radius(evaluator, precision=args.precision, initial_radius=args.initial_radius, max_radius=args.max_radius)
 
                 if result.evaluation is None:
                     print(f"    FAILED: {result.error}")
@@ -365,7 +365,7 @@ def main() -> int:
 
                 writer.write(
                     csv_row(source_record, target_record, mode, result, top_k=args.top_k, subdivision_points=args.subdivision_points, adaptive_max_points=args.adaptive_max_points,
-                        adaptive_min_separation=args.adaptive_min_separation, ))
+                        adaptive_min_separation=args.adaptive_min_separation))
 
     print(f"\nDone. Wrote {total_jobs} rows to {output}")
     return 0
