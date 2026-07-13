@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QLocale, QSettings, Qt, QThreadPool, QTimer
 from PySide6.QtWidgets import (QApplication, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMessageBox,
-                               QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QVBoxLayout, QWidget, )
+                               QPlainTextEdit, QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget, QVBoxLayout, QWidget, )
 
 from river_matcher.cancellation import CancellationToken
 from river_matcher.candidates import CandidateMode, prepare_candidate_target
@@ -19,6 +19,7 @@ from river_matcher.dynamic_programming import Objective
 from river_matcher.matcher import AggregationMatchResult, MatchedEdge, MatchSolution
 from river_matcher.models import JunctionGraph
 from river_matcher.preflight import MatchingPreflight
+from river_matcher.ui.overlay_views import LayeredGraph3DView, Overlay2DView
 from river_matcher.ui.widgets import CostOptionsWidget, GraphView
 from river_matcher.ui.workers import (CatalogOutcome, CatalogWorker, GraphInfo, GraphRepository, MappingScoreOutcome, MappingScoreWorker, MatchWorker, PairSessionStore,
                                       PreflightOutcome, PreflightWorker, PreviewOutcome, PreviewWorker, RunOutcome, load_matching_pair, )
@@ -232,6 +233,8 @@ class MainWindow(QMainWindow):
 
         self.source_view = GraphView("source")
         self.target_view = GraphView("target")
+        self.overlay_2d_view = Overlay2DView()
+        self.layered_3d_view = LayeredGraph3DView()
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
         self.details.setMaximumBlockCount(1000)
@@ -354,9 +357,14 @@ class MainWindow(QMainWindow):
         views.setStretchFactor(0, 1)
         views.setStretchFactor(1, 1)
 
+        self.view_tabs = QTabWidget()
+        self.view_tabs.addTab(views, "Side by side")
+        self.view_tabs.addTab(self.overlay_2d_view, "Overlay 2D")
+        self.view_tabs.addTab(self.layered_3d_view, "Layered 3D")
+
         outer.addLayout(controls)
         outer.addLayout(buttons)
-        outer.addWidget(views, 1)
+        outer.addWidget(self.view_tabs, 1)
         outer.addWidget(QLabel("Selection and run details"))
         outer.addWidget(self.details)
 
@@ -392,6 +400,9 @@ class MainWindow(QMainWindow):
         self.target_view.vertexSelected.connect(self._target_vertex_selected)
         self.source_view.edgePositionSelected.connect(self._source_edge_selected)
         self.target_view.edgePositionSelected.connect(self._target_witness_selected)
+        self.overlay_2d_view.sourceVertexSelected.connect(self._source_vertex_selected)
+        self.overlay_2d_view.targetVertexSelected.connect(self._target_vertex_selected)
+        self.overlay_2d_view.sourceEdgePositionSelected.connect(self._source_edge_selected)
 
     @staticmethod
     def _graph_group(path: Path) -> str:
@@ -495,6 +506,7 @@ class MainWindow(QMainWindow):
 
         self._current_outcome = None
         self.save_button.setEnabled(False)
+        self._clear_solution_views()
 
         if self._display_mode == "imported" and not self._imported_pair_is_current():
             self._select_data(self.mapping_mode_combo, "computed")
@@ -658,16 +670,46 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(150, start)
 
+    def _set_graph_views(self, source: JunctionGraph, target: JunctionGraph) -> None:
+        if self.source_view.graph is not source:
+            self.source_view.set_graph(source, title=f"Source: {source.name} — {len(source.vertices)} V / {len(source.edges)} E")
+        if self.target_view.graph is not target:
+            self.target_view.set_graph(target, title=f"Target: {target.name} — {len(target.vertices)} V / {len(target.edges)} E")
+        self.overlay_2d_view.set_graphs(source, target)
+        self.layered_3d_view.set_graphs(source, target)
+
+    def _clear_solution_views(self) -> None:
+        self.source_view.clear_result_overlays()
+        self.target_view.clear_result_overlays()
+        self.overlay_2d_view.clear_solution()
+        self.layered_3d_view.clear_solution()
+
+    def _set_solution_views(self, mapping: Mapping[int, int], edges: Sequence[MatchedEdge]) -> None:
+        self.source_view.clear_result_overlays()
+        self.target_view.clear_result_overlays()
+        self.target_view.set_witnesses(edges)
+        self.overlay_2d_view.set_solution(mapping, edges)
+        self.layered_3d_view.set_solution(mapping, edges)
+
+    def _set_mapping_views(self, mapping: Mapping[int, int]) -> None:
+        self.source_view.clear_result_overlays()
+        self.target_view.clear_result_overlays()
+        self.overlay_2d_view.set_mapping(mapping)
+        self.layered_3d_view.set_mapping(mapping)
+
     def _preview_ready(self, raw_outcome: object) -> None:
         if not isinstance(raw_outcome, PreviewOutcome) or raw_outcome.request_id != self._preview_request_id:
             return
 
         outcome = raw_outcome
-        self.source_view.set_graph(outcome.source, title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E")
-        self.target_view.set_graph(outcome.target, title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E")
+        if self._display_mode == "computed" and self._current_outcome is not None:
+            self._display_outcome(self._current_outcome)
+            return
+        self._set_graph_views(outcome.source, outcome.target)
         if self._display_mode == "imported" and self._imported_pair_is_current():
             self._display_imported_mapping()
         else:
+            self._clear_solution_views()
             self.details.setPlainText("Graphs loaded. Run a cost to compute a mapping.")
             self.score_label.setText("Score: —")
 
@@ -686,6 +728,8 @@ class MainWindow(QMainWindow):
         if cached is not None:
             self._display_outcome(cached)
         else:
+            self._current_outcome = None
+            self._clear_solution_views()
             self.score_label.setText("Score: —")
             self.status_label.setText("This cost has not been computed for the current pair and parameters.")
 
@@ -700,6 +744,16 @@ class MainWindow(QMainWindow):
     def _cost_options_changed(self) -> None:
         if self._display_mode == "imported":
             self._display_imported_mapping()
+            return
+
+        key = self._current_key(self.current_cost_name)
+        cached = None if key is None else self._outcomes.get(key)
+        if cached is not None:
+            self._display_outcome(cached)
+        else:
+            self._current_outcome = None
+            self._clear_solution_views()
+            self.score_label.setText("Score: —")
 
     def _mapping_mode_changed(self) -> None:
         imported_mode = self._display_mode == "imported"
@@ -715,9 +769,10 @@ class MainWindow(QMainWindow):
         if cached is not None:
             self._display_outcome(cached)
         else:
+            self._current_outcome = None
             self.score_label.setText("Score: —")
             self.save_button.setEnabled(False)
-            self.target_view.clear_result_overlays()
+            self._clear_solution_views()
             self.details.setPlainText("Computed optimum selected. Run the current cost to compute a mapping.")
 
     def _run_selected(self) -> None:
@@ -749,9 +804,9 @@ class MainWindow(QMainWindow):
         token = CancellationToken()
         self._active_token = token
         pending = PendingRun(paths=(paths[0].resolve(), paths[1].resolve()), costs=tuple((name, dict(options)) for name, options in costs),
-            candidate_rho=float(self.candidate_rho.value()), top_k=int(self.top_k.value()), candidate_mode=self.current_candidate_mode,
-            subdivision_points=int(self.subdivision_points.value()), adaptive_max_points_per_source=int(self.adaptive_max_points_per_source.value()),
-            adaptive_min_separation=float(self.adaptive_min_separation.value()), )
+                             candidate_rho=float(self.candidate_rho.value()), top_k=int(self.top_k.value()), candidate_mode=self.current_candidate_mode,
+                             subdivision_points=int(self.subdivision_points.value()), adaptive_max_points_per_source=int(self.adaptive_max_points_per_source.value()),
+                             adaptive_min_separation=float(self.adaptive_min_separation.value()), )
         self._pending_run = pending
         self._set_busy(True)
         self.settings.setValue("candidate_rho", self.candidate_rho.value())
@@ -953,8 +1008,7 @@ class MainWindow(QMainWindow):
         self._current_outcome = outcome
         result = outcome.result
         solution = self._selected_solution(result)
-        self.source_view.set_graph(outcome.source, title=f"Source: {outcome.source.name} — {len(outcome.source.vertices)} V / {len(outcome.source.edges)} E")
-        self.target_view.set_graph(outcome.target, title=f"Target: {outcome.target.name} — {len(outcome.target.vertices)} V / {len(outcome.target.edges)} E")
+        self._set_graph_views(outcome.source, outcome.target)
         effective = result.effective_candidate_statistics or result.candidate_statistics
         compatibility = result.compatibility_statistics
         pruning = 0 if compatibility is None else compatibility.removed_candidates
@@ -962,7 +1016,7 @@ class MainWindow(QMainWindow):
         estimate = 0 if preflight is None else preflight.estimated_state_upper_bound
 
         if solution is None:
-            self.target_view.clear_result_overlays()
+            self._clear_solution_views()
             self.score_label.setText("Score: infeasible")
             self.details.setPlainText(f"cost: {outcome.cost_name}\n"
                                       f"aggregation: {self.aggregation_combo.currentData()}\n"
@@ -974,7 +1028,7 @@ class MainWindow(QMainWindow):
             self.save_button.setEnabled(True)
             return
 
-        self.target_view.set_witnesses(solution.edges)
+        self._set_solution_views(solution.mapping, solution.edges)
         self.score_label.setText(f"Optimal {solution.objective.value}: {solution.value:.12g}")
         dp = result.dp_statistics
         self.details.setPlainText(f"cost: {outcome.cost_name}\n"
@@ -1005,12 +1059,14 @@ class MainWindow(QMainWindow):
         imported = self._imported_mapping
 
         if imported is None:
+            self._clear_solution_views()
             self.score_label.setText("Score: —")
             self.details.setPlainText("No imported mapping is loaded.")
             self.score_mapping_button.setEnabled(False)
             return
 
         if not self._imported_pair_is_current():
+            self._clear_solution_views()
             self.score_label.setText("Score: —")
             self.details.setPlainText("The imported mapping belongs to a different graph pair.")
             self.score_mapping_button.setEnabled(False)
@@ -1018,18 +1074,14 @@ class MainWindow(QMainWindow):
 
         source = imported.source_graph
         target = imported.target_graph
-
-        if self.source_view.graph is not source:
-            self.source_view.set_graph(source, title=f"Source: {source.name} — {len(source.vertices)} V / {len(source.edges)} E")
-        if self.target_view.graph is not target:
-            self.target_view.set_graph(target, title=f"Target: {target.name} — {len(target.vertices)} V / {len(target.edges)} E")
+        self._set_graph_views(source, target)
 
         outcome = self._current_imported_score()
         objective = str(self.aggregation_combo.currentData())
 
         if outcome is not None:
             evaluation = outcome.evaluation
-            self.target_view.set_witnesses(evaluation.edges)
+            self._set_solution_views(imported.mapping, evaluation.edges)
             if objective == Objective.BOTTLENECK.value:
                 value = evaluation.bottleneck_value
             elif objective == Objective.LENGTH_WEIGHTED_ADDITIVE.value:
@@ -1065,7 +1117,7 @@ class MainWindow(QMainWindow):
                                       f"candidate-domain check: {candidate_note}"
                                       f"{timing_text}", )
         elif self._saved_import_matches_current_cost() and imported.saved_edges:
-            self.target_view.set_witnesses(imported.saved_edges)
+            self._set_solution_views(imported.mapping, imported.saved_edges)
             if objective == Objective.BOTTLENECK.value:
                 value = imported.saved_bottleneck_value
             elif objective == Objective.LENGTH_WEIGHTED_ADDITIVE.value:
@@ -1087,7 +1139,7 @@ class MainWindow(QMainWindow):
                                       "The displayed witnesses are the witnesses stored in the JSON. "
                                       "Click 'Score imported φ' to recompute them under the selected cost and options.", )
         else:
-            self.target_view.clear_result_overlays()
+            self._set_mapping_views(imported.mapping)
             self.score_label.setText("Imported φ: not scored for this cost")
             self.details.setPlainText(f"displayed mapping: imported φ from {imported.json_path.name}\n"
                                       f"mapping: {len(imported.mapping)} source vertices\n"
@@ -1131,6 +1183,12 @@ class MainWindow(QMainWindow):
         self.source_view.highlight_vertices([source_vertex])
         self.target_view.highlight_vertices([target_vertex])
         incident = [edge for edge in edges if edge.source_u == source_vertex or edge.source_v == source_vertex]
+        selected_edge = incident[0].edge_id if incident else None
+
+        for view in (self.overlay_2d_view, self.layered_3d_view):
+            view.set_selected_source_vertex(source_vertex)
+            view.set_selected_target_vertex(target_vertex)
+            view.set_selected_source_edge(selected_edge)
 
         if incident:
             self.source_view.highlight_edge(incident[0].edge_id)
@@ -1148,6 +1206,10 @@ class MainWindow(QMainWindow):
         sources = sorted(source for source, target in mapping.items() if target == target_vertex)
         self.target_view.highlight_vertices([target_vertex])
         self.source_view.highlight_vertices(sources)
+        for view in (self.overlay_2d_view, self.layered_3d_view):
+            view.set_selected_source_vertex(None)
+            view.set_selected_target_vertex(target_vertex)
+            view.set_selected_source_edge(None)
         self.details.appendPlainText(f"\ntarget vertex {target_vertex} receives source vertices {sources or 'none'}")
 
     def _source_edge_selected(self, edge_id: int, fraction: float) -> None:
@@ -1157,14 +1219,16 @@ class MainWindow(QMainWindow):
             return
 
         _, edges = displayed
+        self.source_view.highlight_edge(edge_id)
+        self.source_view.highlight_fraction(edge_id, fraction)
+        for view in (self.overlay_2d_view, self.layered_3d_view):
+            view.set_selected_source_edge(edge_id)
         edge = next((item for item in edges if item.edge_id == edge_id), None)
 
         if edge is None:
             self.details.appendPlainText(f"\nsource edge e{edge_id}: no witness is currently loaded for the displayed mapping and cost")
             return
 
-        self.source_view.highlight_edge(edge_id)
-        self.source_view.highlight_fraction(edge_id, fraction)
         self.target_view.highlight_edge(edge_id, witness=True)
         self.target_view.highlight_fraction(edge_id, fraction, witness=True)
         self.details.appendPlainText(f"\nsource edge e{edge_id} at {fraction:.1%} maps along its witness at {fraction:.1%}; local cost={edge.cost:.12g}")
@@ -1181,6 +1245,8 @@ class MainWindow(QMainWindow):
         if edge is None:
             return
 
+        for view in (self.overlay_2d_view, self.layered_3d_view):
+            view.set_selected_source_edge(edge_id)
         self.target_view.highlight_edge(edge_id, witness=True)
         self.target_view.highlight_fraction(edge_id, fraction, witness=True)
         self.source_view.highlight_edge(edge_id)
@@ -1456,6 +1522,7 @@ class MainWindow(QMainWindow):
         self._outcomes.clear()
         self._mapping_scores.clear()
         self._current_outcome = None
+        self._clear_solution_views()
         self.save_button.setEnabled(False)
         self.score_label.setText("Score: —")
         self.status_label.setText("Caches cleared")

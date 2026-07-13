@@ -18,6 +18,7 @@ dependencies = [
     "matplotlib",
     "PySide6",
     "pyqtgraph",
+    "PyOpenGL",
     "pillow>=12.2.0",
     "curvesimilarities>=0.3.0",
     "dtaidistance>=2.4.0",

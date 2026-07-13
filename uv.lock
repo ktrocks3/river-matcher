@@ -917,6 +917,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyopengl"
+version = "3.1.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/16/912b7225d56284859cd9a672827f18be43f8012f8b7b932bc4bd959a298e/pyopengl-3.1.10.tar.gz", hash = "sha256:c4a02d6866b54eb119c8e9b3fb04fa835a95ab802dd96607ab4cdb0012df8335", size = 1915580 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/e4/1ba6f44e491c4eece978685230dde56b14d51a0365bc1b774ddaa94d14cd/pyopengl-3.1.10-py3-none-any.whl", hash = "sha256:794a943daced39300879e4e47bd94525280685f42dbb5a998d336cfff151d74f", size = 3194996 },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1077,6 +1086,7 @@ dependencies = [
     { name = "numba" },
     { name = "numpy" },
     { name = "pillow" },
+    { name = "pyopengl" },
     { name = "pyqtgraph" },
     { name = "pyside6" },
     { name = "shapely" },
@@ -1122,6 +1132,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "openpyxl", marker = "extra == 'experiments'" },
     { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pyopengl" },
     { name = "pyqtgraph" },
     { name = "pyside6" },
     { name = "pytest", marker = "extra == 'dev'" },
