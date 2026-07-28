@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """
-Merge River-Matcher experiment suites into analysis-ready tables.
+Merge GeoMatcher experiment suites into analysis-ready tables.
 
 The script reads schema-v2 suite_summary.json files, follows each report path,
 extracts complete mappings and edge-cost summaries, removes configured
 screening duplicates, and writes compact CSV/JSON tables.
 
-Run from the River-Matcher repository root:
+Run from the GeoMatcher repository root:
 
     uv run python scripts/merge_experiment_results.py experiments/analysis_sources.json
 """
@@ -477,7 +477,7 @@ def _copy_benchmark(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Merge River-Matcher experiment outputs."
+        description="Merge GeoMatcher experiment outputs."
     )
     parser.add_argument("config", type=Path)
     parser.add_argument(

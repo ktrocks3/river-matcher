@@ -12,7 +12,7 @@ from matplotlib.lines import Line2D
 
 from river_matcher import load_junction_graph
 
-ROOT = Path(r"C:\Users\Kishan\Documents\University\Thesis\River-Matcher")
+ROOT = Path(__file__).resolve().parents[1]
 
 SOURCE_PATH = ROOT / "GraphExport" / "2014e5.txt"
 TARGET_PATH = ROOT / "GraphExport" / "1955e5.txt"

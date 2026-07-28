@@ -74,8 +74,8 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="river-match", description=("Match a source river graph to a target graph using the exact "
-                                                                      "tree-decomposition dynamic program."))
+    parser = argparse.ArgumentParser(prog="geomatcher", description=("Match a source embedded river network to a target network using the exact "
+                                                                     "tree-decomposition dynamic program."))
     parser.add_argument("source", type=Path, help="Source graph export file.")
     parser.add_argument("target", type=Path, help="Target graph export file.")
     parser.add_argument("--cost", required=True, choices=tuple(cost_name.value for cost_name in available_costs()), help="Local source-edge cost method.")

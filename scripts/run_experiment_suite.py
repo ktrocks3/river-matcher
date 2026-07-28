@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Run a reproducible River-Matcher experiment suite without opening the UI.
+Run a reproducible GeoMatcher experiment suite without opening the UI.
 
 For every graph pair and cost, this script:
   * loads and prepares the graph pair once;
@@ -11,7 +11,7 @@ For every graph pair and cost, this script:
   * writes a best/median/worst edge-detail PNG for each feasible objective;
   * writes one suite_summary.json containing compact rows for later analysis.
 
-Run from the River-Matcher repository root:
+Run from the GeoMatcher repository root:
 
     uv run python scripts/run_experiment_suite.py experiments.json
 
@@ -523,7 +523,7 @@ def _validate_config(config: Mapping[str, Any]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=("Run a headless River-Matcher experiment suite and "
+    parser = argparse.ArgumentParser(description=("Run a headless GeoMatcher experiment suite and "
                                                   "export JSON reports and PNG figures."))
     parser.add_argument("config", type=Path, help="Path to the experiment-suite JSON file.")
     parser.add_argument("--output", type=Path, default=None, help=("Override the output directory from the configuration."))

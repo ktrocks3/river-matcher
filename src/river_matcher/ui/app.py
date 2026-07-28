@@ -158,10 +158,10 @@ def _result_payload(outcome: RunOutcome) -> dict[str, object]:
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("River Graph Matcher")
+        self.setWindowTitle("GeoMatcher")
         self.resize(1500, 900)
 
-        self.settings = QSettings("GraphThesis", "RiverGraphMatcher")
+        self.settings = QSettings("GraphThesis", "GeoMatcher")
         self.thread_pool = QThreadPool.globalInstance()
         self.repository = GraphRepository()
         self.sessions = PairSessionStore(maximum_sessions=6)
@@ -1664,7 +1664,7 @@ class MainWindow(QMainWindow):
 
 def main() -> int:
     application = QApplication.instance() or QApplication(sys.argv)
-    application.setApplicationName("River Graph Matcher")
+    application.setApplicationName("GeoMatcher")
     application.setOrganizationName("GraphThesis")
     application.setStyle("Fusion")
     window = MainWindow()

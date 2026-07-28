@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "river-graph-matcher"
+name = "geomatcher"
 version = "0.1.0"
-description = "Tree-decomposition-based matching of embedded river networks."
+description = "Exact finite-domain matching of embedded river networks."
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -125,4 +125,4 @@ dev = [
 ]
 
 [project.scripts]
-river-match = "river_matcher.cli:main"
+geomatcher = "river_matcher.cli:main"

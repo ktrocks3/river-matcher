@@ -16,7 +16,7 @@ from matplotlib.patches import Rectangle
 from river_matcher import load_junction_graph
 
 
-ROOT = Path(r"C:\Users\Kishan\Documents\University\Thesis\River-Matcher")
+ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "GraphExport" / "2014e5.txt"
 TARGET_PATH = ROOT / "GraphExport" / "1955e3.txt"
 PAIR_DIR = ROOT / "experiment_results" / "confirmed_pairs" / "2014e5_to_1955e3"

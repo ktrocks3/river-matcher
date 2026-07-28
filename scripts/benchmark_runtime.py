@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Controlled runtime benchmark for River-Matcher.
+Controlled runtime benchmark for GeoMatcher.
 
 Protocol
 --------
@@ -13,7 +13,7 @@ Protocol
 * Result fingerprints are checked against the warm-up result so timing runs
   cannot silently change the computed mapping or objective values.
 
-Run from the River-Matcher repository root:
+Run from the GeoMatcher repository root:
 
     uv run python scripts/benchmark_runtime.py experiments/runtime_benchmark.json
 """
@@ -281,7 +281,7 @@ def _pair_identifier(pair: Mapping[str, Any]) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Benchmark River-Matcher with fresh matcher instances, "
+            "Benchmark GeoMatcher with fresh matcher instances, "
             "discarded warm-ups, and repeated measured trials."
         )
     )
