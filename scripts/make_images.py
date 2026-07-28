@@ -1,16 +1,16 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.collections import LineCollection
 from matplotlib.lines import Line2D
 
 from river_matcher import load_junction_graph
+from river_matcher.visualization import display_bounds, display_coordinates
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,6 +22,7 @@ PAIR_DIR = (ROOT / "experiment_results" / "cross_year_same_scale" / "2014e5_to_1
 OUTPUT_DIR = ROOT / "thesis_figures" / "chapter5"
 
 BBOX = (200.0, 500.0, 100.0, 320.0)
+DISPLAY_BBOX = display_bounds(BBOX)
 
 COSTS = [("relative_length_error", "Relative length error"), ("mean_distance_tangent", "Mean distance and tangent"), ("hausdorff_distance", "Hausdorff distance"),
     ("discrete_frechet_distance", "Discrete Fréchet distance"), ("dynamic_time_warping_distance", "Dynamic time warping")]
@@ -51,7 +52,7 @@ def draw_solution(ax, solution, title, source, target, source_lines, target_line
     witnesses = []
 
     for edge in solution["edges"]:
-        witness = np.asarray(edge["witness"], dtype=float)
+        witness = display_coordinates(edge["witness"])
 
         if witness.ndim == 2 and witness.shape[0] >= 2:
             witnesses.append(witness)
@@ -65,11 +66,11 @@ def draw_solution(ax, solution, title, source, target, source_lines, target_line
             if source_vertex not in vertex_mapping:
                 continue
 
-            source_point = np.asarray(source.coordinates[source_vertex], dtype=float)
+            source_point = display_coordinates(source.coordinates[source_vertex])
 
             target_vertex = vertex_mapping[source_vertex]
 
-            target_point = np.asarray(target.coordinates[target_vertex], dtype=float)
+            target_point = display_coordinates(target.coordinates[target_vertex])
 
             ax.plot([source_point[0], target_point[0]], [source_point[1], target_point[1]], color=MAPPING_LINE, linewidth=0.7, linestyle=":", alpha=0.55, zorder=4)
 
@@ -77,8 +78,8 @@ def draw_solution(ax, solution, title, source, target, source_lines, target_line
 
             ax.scatter(target_point[0], target_point[1], s=22, marker="s", facecolor="white", edgecolor=TARGET, linewidth=1.0, zorder=6)
 
-    ax.set_xlim(BBOX[0], BBOX[1])
-    ax.set_ylim(BBOX[2], BBOX[3])
+    ax.set_xlim(DISPLAY_BBOX[0], DISPLAY_BBOX[1])
+    ax.set_ylim(DISPLAY_BBOX[2], DISPLAY_BBOX[3])
     ax.set_aspect("equal", adjustable="box")
     ax.set_title(title, fontsize=10)
     ax.set_axis_off()
@@ -87,9 +88,9 @@ def draw_solution(ax, solution, title, source, target, source_lines, target_line
 source = load_junction_graph(SOURCE_PATH)
 target = load_junction_graph(TARGET_PATH)
 
-source_lines = [np.asarray(edge.polyline, dtype=float) for edge in source.edges if len(edge.polyline) >= 2]
+source_lines = [display_coordinates(edge.polyline) for edge in source.edges if len(edge.polyline) >= 2]
 
-target_lines = [np.asarray(edge.polyline, dtype=float) for edge in target.edges if len(edge.polyline) >= 2]
+target_lines = [display_coordinates(edge.polyline) for edge in target.edges if len(edge.polyline) >= 2]
 
 reports = {}
 

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QHBoxLayout, QLabel, QP
 from river_matcher.matcher import MatchedEdge
 from river_matcher.models import JunctionGraph
 from river_matcher.ui.widgets import PolylineIndex, _as_points, _joined_path, _vertex_positions
+from river_matcher.visualization import display_coordinates
 
 try:
     import pyqtgraph.opengl as gl
@@ -26,7 +27,7 @@ FloatArray = np.ndarray
 
 
 def _polyline_map(graph: JunctionGraph) -> dict[int, FloatArray]:
-    return {int(edge.id): points for edge in graph.edges if (points := _as_points(edge.polyline)) is not None}
+    return {int(edge.id): display_coordinates(points) for edge in graph.edges if (points := _as_points(edge.polyline)) is not None}
 
 
 def _set_joined_data(item: pg.PlotDataItem, polylines: Iterable[FloatArray]) -> None:
@@ -198,7 +199,7 @@ class Overlay2DView(QWidget):
         _set_joined_data(self._connector_item, connectors)
 
         witnesses = {
-            int(edge.edge_id): points
+            int(edge.edge_id): display_coordinates(points)
             for edge in self._matched_edges
             if (points := _as_points(edge.witness)) is not None
         }
@@ -479,9 +480,9 @@ class LayeredGraph3DView(QWidget):
         self._rebuild_edge_highlights()
 
     def _calculate_normalization(self, source: JunctionGraph, target: JunctionGraph) -> None:
-        points = [points for graph in (source, target) for edge in graph.edges if (points := _as_points(edge.polyline)) is not None]
+        points = [display_coordinates(points) for graph in (source, target) for edge in graph.edges if (points := _as_points(edge.polyline)) is not None]
         if not points:
-            points = [np.asarray(tuple(source.coordinates.values()) + tuple(target.coordinates.values()), dtype=np.float64)]
+            points = [display_coordinates(tuple(source.coordinates.values()) + tuple(target.coordinates.values()))]
         combined = np.concatenate(points)
         minimum = np.min(combined, axis=0)
         maximum = np.max(combined, axis=0)
@@ -523,7 +524,7 @@ class LayeredGraph3DView(QWidget):
         self._connector_segments_xy = np.concatenate(connector_pairs) if connector_pairs else np.empty((0, 2), dtype=np.float64)
 
         self._witness_polylines = {
-            int(edge.edge_id): np.ascontiguousarray((points - self._centre) / self._scale)
+            int(edge.edge_id): np.ascontiguousarray((display_coordinates(points) - self._centre) / self._scale)
             for edge in self._matched_edges
             if (points := _as_points(edge.witness)) is not None
         }

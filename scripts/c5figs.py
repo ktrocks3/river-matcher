@@ -1,7 +1,6 @@
-from pathlib import Path
 import json
-import math
 import shutil
+from pathlib import Path
 
 import matplotlib
 
@@ -14,6 +13,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 from river_matcher import load_junction_graph
+from river_matcher.visualization import display_coordinates
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +40,7 @@ plt.rcParams.update({"font.size": 9, "axes.titlesize": 10, "figure.titlesize": 1
 
 
 def graph_lines(graph):
-    return [np.asarray(edge.polyline, dtype=float) for edge in graph.edges if len(edge.polyline) >= 2]
+    return [display_coordinates(edge.polyline) for edge in graph.edges if len(edge.polyline) >= 2]
 
 
 def save(fig, name):
@@ -98,16 +98,16 @@ def incident_payloads(solution, vertex):
 
 
 def region_bounds(source, left, right, vertex, minimum_window=155):
-    points = [np.asarray(source.coordinates[vertex], dtype=float)]
+    points = [display_coordinates(source.coordinates[vertex])]
 
     edge_ids = {int(edge["edge_id"]) for edge in incident_payloads(left, vertex) + incident_payloads(right, vertex)}
 
     for edge_id in edge_ids:
-        points.extend(np.asarray(source.edge_by_id[edge_id].polyline, dtype=float))
+        points.extend(display_coordinates(source.edge_by_id[edge_id].polyline))
 
     for solution in (left, right):
         for edge in incident_payloads(solution, vertex):
-            points.extend(np.asarray(edge["witness"], dtype=float))
+            points.extend(display_coordinates(edge["witness"]))
 
     points = np.asarray(points, dtype=float)
     low = points.min(axis=0)
@@ -135,9 +135,9 @@ def draw_region(ax, source, target, source_lines, target_lines, solution, vertex
     for payload in payloads:
         edge_id = int(payload["edge_id"])
 
-        source_polyline = np.asarray(source.edge_by_id[edge_id].polyline, dtype=float)
+        source_polyline = display_coordinates(source.edge_by_id[edge_id].polyline)
 
-        witness = np.asarray(payload["witness"], dtype=float)
+        witness = display_coordinates(payload["witness"])
 
         witness_length = float(np.linalg.norm(np.diff(witness, axis=0), axis=1).sum())
 
@@ -147,11 +147,11 @@ def draw_region(ax, source, target, source_lines, target_lines, solution, vertex
 
         ax.plot(witness[:, 0], witness[:, 1], color=TARGET_HIGHLIGHT, linewidth=3.2, linestyle=witness_style, dash_capstyle="round", solid_capstyle="round", zorder=6)
 
-    source_point = np.asarray(source.coordinates[vertex], dtype=float)
+    source_point = display_coordinates(source.coordinates[vertex])
 
     mapped_vertex = normalized_mapping(solution)[vertex]
 
-    target_point = np.asarray(target.coordinates[mapped_vertex], dtype=float)
+    target_point = display_coordinates(target.coordinates[mapped_vertex])
 
     ax.scatter(source_point[0], source_point[1], s=45, marker="o", facecolor="white", edgecolor=CHANGED, linewidth=1.8, zorder=8)
 
@@ -169,7 +169,7 @@ def draw_difference_overview(ax, source, source_lines, target_lines, changed, bo
 
     ax.add_collection(LineCollection(source_lines, colors="#8799a5", linewidths=1.25, alpha=0.8))
 
-    changed_points = np.asarray([source.coordinates[vertex] for vertex in sorted(changed)], dtype=float)
+    changed_points = display_coordinates([source.coordinates[vertex] for vertex in sorted(changed)])
 
     ax.scatter(changed_points[:, 0], changed_points[:, 1], s=18, color=CHANGED, zorder=5)
 
@@ -184,7 +184,8 @@ def draw_difference_overview(ax, source, source_lines, target_lines, changed, bo
             x_min + 0.02 * (x_max - x_min), y_max - 0.05 * (y_max - y_min), labels[index], fontsize=11, fontweight="bold", color=TARGET_HIGHLIGHT, verticalalignment="top", zorder=7
         )
 
-    all_points = np.vstack(source_lines + target_lines)
+    box_corners = [np.asarray(((x_min, y_min), (x_max, y_max)), dtype=float) for x_min, x_max, y_min, y_max in boxes]
+    all_points = np.vstack(source_lines + target_lines + box_corners)
     low = all_points.min(axis=0)
     high = all_points.max(axis=0)
     padding = 0.025 * np.maximum(high - low, 1)
@@ -221,9 +222,9 @@ for axis, (cost_name, (label, edge_id, minimum_window)) in zip(axes, EXAMPLES.it
 
     payload = next(edge for edge in solution["edges"] if int(edge["edge_id"]) == edge_id)
 
-    source_polyline = np.asarray(source.edge_by_id[edge_id].polyline, dtype=float)
+    source_polyline = display_coordinates(source.edge_by_id[edge_id].polyline)
 
-    witness = np.asarray(payload["witness"], dtype=float)
+    witness = display_coordinates(payload["witness"])
 
     points = np.vstack((source_polyline, witness))
     low = points.min(axis=0)
@@ -240,13 +241,13 @@ for axis, (cost_name, (label, edge_id, minimum_window)) in zip(axes, EXAMPLES.it
 
     axis.plot(witness[:, 0], witness[:, 1], color=TARGET_HIGHLIGHT, linewidth=3.3, linestyle="--", dash_capstyle="round", zorder=6)
 
-    source_u = np.asarray(source.coordinates[int(payload["source_u"])], dtype=float)
+    source_u = display_coordinates(source.coordinates[int(payload["source_u"])])
 
-    source_v = np.asarray(source.coordinates[int(payload["source_v"])], dtype=float)
+    source_v = display_coordinates(source.coordinates[int(payload["source_v"])])
 
-    target_u = np.asarray(target.coordinates[int(payload["target_u"])], dtype=float)
+    target_u = display_coordinates(target.coordinates[int(payload["target_u"])])
 
-    target_v = np.asarray(target.coordinates[int(payload["target_v"])], dtype=float)
+    target_v = display_coordinates(target.coordinates[int(payload["target_v"])])
 
     axis.scatter([source_u[0], source_v[0]], [source_u[1], source_v[1]], marker="o", s=38, facecolor="white", edgecolor=SOURCE_HIGHLIGHT, linewidth=1.5, zorder=8)
 

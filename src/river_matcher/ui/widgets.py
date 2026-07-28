@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QCheckBox, QDoubleSpinBox, QFormLayout, QLabel, QS
 
 from river_matcher.matcher import MatchedEdge
 from river_matcher.models import JunctionGraph
+from river_matcher.visualization import display_coordinates
 
 FloatArray = np.ndarray
 
@@ -64,7 +65,11 @@ def _vertex_positions(graph: JunctionGraph) -> dict[int, tuple[float, float]]:
                 positions[vertex_id] = (float(point[0]), float(point[1]))
                 break
 
-    return positions
+    displayed_positions: dict[int, tuple[float, float]] = {}
+    for vertex, point in positions.items():
+        displayed = display_coordinates(point)
+        displayed_positions[vertex] = float(displayed[0]), float(displayed[1])
+    return displayed_positions
 
 
 def _joined_path(polylines: Iterable[FloatArray]) -> tuple[FloatArray, FloatArray]:
@@ -227,7 +232,7 @@ class GraphView(pg.PlotWidget):
         self.graph = graph
         self.setTitle(title)
         edge_polylines = {
-            int(edge.id): points
+            int(edge.id): display_coordinates(points)
             for edge in graph.edges
             if (points := _as_points(edge.polyline)) is not None
         }
@@ -250,7 +255,7 @@ class GraphView(pg.PlotWidget):
 
     def set_witnesses(self, edges: Iterable[MatchedEdge]) -> None:
         witnesses = {
-            int(edge.edge_id): points
+            int(edge.edge_id): display_coordinates(points)
             for edge in edges
             if (points := _as_points(edge.witness)) is not None
         }

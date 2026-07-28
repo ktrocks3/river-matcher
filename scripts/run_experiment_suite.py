@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import matplotlib
 
@@ -44,6 +44,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 
 from river_matcher import (RiverGraphMatcher, available_costs, load_junction_graph)
+from river_matcher.visualization import display_coordinates
 
 SCHEMA_VERSION = 2
 
@@ -212,7 +213,7 @@ def _all_graph_lines(graph: Any) -> list[np.ndarray]:
     for edge in graph.edges:
         polyline = np.asarray(edge.polyline, dtype=np.float64)
         if polyline.ndim == 2 and polyline.shape[0] >= 2:
-            lines.append(polyline)
+            lines.append(display_coordinates(polyline))
     return lines
 
 
@@ -243,7 +244,7 @@ def _finite_cost_range(edges: Sequence[Any], visual_range: Sequence[float] | Non
 
 def _source_edge_polyline(source_edge_by_id: Mapping[int, Any], edge_id: int) -> np.ndarray:
     source_edge = source_edge_by_id[edge_id]
-    return np.asarray(source_edge.polyline, dtype=np.float64)
+    return display_coordinates(source_edge.polyline)
 
 
 def _plot_overview(source: Any, target: Any, solution: Any, *, title: str, output_path: Path, dpi: int, visual_range: Sequence[float] | None, cost_label: str) -> None:
@@ -267,7 +268,7 @@ def _plot_overview(source: Any, target: Any, solution: Any, *, title: str, outpu
         cost = float(np.clip(matched_edge.cost, vmin, vmax))
         color = cmap(norm(cost))
 
-        witness = np.asarray(matched_edge.witness, dtype=np.float64)
+        witness = display_coordinates(matched_edge.witness)
         if witness.ndim == 2 and witness.shape[0] >= 2:
             witness_lines.append(witness)
             witness_colors.append(color)
@@ -283,13 +284,11 @@ def _plot_overview(source: Any, target: Any, solution: Any, *, title: str, outpu
         ax.add_collection(LineCollection(source_lines, colors=source_colors, linewidths=5.0, alpha=0.34, zorder=3))
         ax.add_collection(LineCollection(source_lines, colors="black", linewidths=1.0, alpha=0.95, zorder=4))
 
-    source_x = [float(source.coordinates[vertex][0]) for vertex in source.vertices]
-    source_y = [float(source.coordinates[vertex][1]) for vertex in source.vertices]
-    target_x = [float(target.coordinates[vertex][0]) for vertex in target.vertices]
-    target_y = [float(target.coordinates[vertex][1]) for vertex in target.vertices]
+    source_points = display_coordinates([source.coordinates[vertex] for vertex in source.vertices])
+    target_points = display_coordinates([target.coordinates[vertex] for vertex in target.vertices])
 
-    ax.scatter(target_x, target_y, s=8, c="0.60", alpha=0.45, linewidths=0.0, zorder=2)
-    ax.scatter(source_x, source_y, s=18, facecolors="white", edgecolors="black", linewidths=0.45, zorder=5)
+    ax.scatter(target_points[:, 0], target_points[:, 1], s=8, c="0.60", alpha=0.45, linewidths=0.0, zorder=2)
+    ax.scatter(source_points[:, 0], source_points[:, 1], s=18, facecolors="white", edgecolors="black", linewidths=0.45, zorder=5)
 
     scalar_mappable = ScalarMappable(norm=norm, cmap=cmap)
     scalar_mappable.set_array([])
@@ -331,15 +330,15 @@ def _plot_edge_details(source: Any, target: Any, solution: Any, *, title: str, o
         _draw_context(ax, source, target)
 
         source_polyline = _source_edge_polyline(source_edge_by_id, int(matched_edge.edge_id))
-        witness = np.asarray(matched_edge.witness, dtype=np.float64)
+        witness = display_coordinates(matched_edge.witness)
 
         ax.plot(source_polyline[:, 0], source_polyline[:, 1], linewidth=3.0, label="Source edge", zorder=4)
         ax.plot(witness[:, 0], witness[:, 1], linewidth=3.0, linestyle="--", label="Target witness", zorder=4)
 
-        source_u_xy = np.asarray(source.coordinates[int(matched_edge.source_u)], dtype=np.float64)
-        source_v_xy = np.asarray(source.coordinates[int(matched_edge.source_v)], dtype=np.float64)
-        target_u_xy = np.asarray(target.coordinates[int(matched_edge.target_u)], dtype=np.float64)
-        target_v_xy = np.asarray(target.coordinates[int(matched_edge.target_v)], dtype=np.float64)
+        source_u_xy = display_coordinates(source.coordinates[int(matched_edge.source_u)])
+        source_v_xy = display_coordinates(source.coordinates[int(matched_edge.source_v)])
+        target_u_xy = display_coordinates(target.coordinates[int(matched_edge.target_u)])
+        target_v_xy = display_coordinates(target.coordinates[int(matched_edge.target_v)])
 
         ax.plot([source_u_xy[0], target_u_xy[0]], [source_u_xy[1], target_u_xy[1]], linewidth=0.9, linestyle=":", alpha=0.75, zorder=3)
         ax.plot([source_v_xy[0], target_v_xy[0]], [source_v_xy[1], target_v_xy[1]], linewidth=0.9, linestyle=":", alpha=0.75, zorder=3)
